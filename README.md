@@ -1,0 +1,1 @@
+Ongoing project to make a spiking neural network in C++.
