@@ -16,14 +16,17 @@ private:
     
 public:
 
+    Matrix(vector<int> dims, vector<float> data);
     Matrix(vector<int> dims);
     Matrix matmul(Matrix a);
-    Matrix scmul(Matrix a);
-    Matrix add(Matrix a);
-    Matrix subtract(Matrix a);
-    Matrix transpose();
+    void scmul(float s);
+    void add(Matrix a);
+    void subtract(Matrix a);
+    void transpose();
     float get(vector<int> pos);
     void set(vector<int> pos, float val);
+    vector<int> getDims();
+    float get_index(int i);
 };
 
 #endif
