@@ -42,9 +42,17 @@ int Matrix::get_idx(vector<int> pos) {
     return idx;
 }
 
-Matrix Matrix::matmul(Matrix a) {
-
-}
+Matrix Matrix::matmul(vector<int> this_axes, Matrix other, vector<int> other_axes) {
+    if (this_axes.size() != other_axes.size()){
+        throw std::invalid_argument("Invalid axes dimensions!");
+    }
+    for (int i = 0; i < this_axes.size(); i++) {
+        if (dims[this_axes[i]] != other.get_dims_index(other_axes[i])) {
+            throw std::invalid_argument("Invalid axes values!");
+        }
+    }
+    //implement matrix multiplaction here
+}   
 
 void Matrix::scmul(float s) {
     for (int i = 0; i < data.size(); i++) {
@@ -53,7 +61,7 @@ void Matrix::scmul(float s) {
 }
 
 void Matrix::add(Matrix a) {
-    if (a.getDims() == dims) {
+    if (a.get_full_dims() == dims) {
         for (int i = 0; i < data.size(); i++) {
             data[i] = data[i] + a.get_index(i);
         }
@@ -63,7 +71,7 @@ void Matrix::add(Matrix a) {
 }
 
 void Matrix::subtract(Matrix a) {
-    if (a.getDims() == dims) {
+    if (a.get_full_dims() == dims) {
         for (int i = 0; i < data.size(); i++) {
             data[i] = data[i] - a.get_index(i);
         }
@@ -84,8 +92,15 @@ void Matrix::set(vector<int> pos, float val) {
     data[get_idx(pos)] = val;
 }
 
-vector<int> Matrix::getDims() {
+vector<int> Matrix::get_full_dims() {
     return dims;
+}
+
+int Matrix::get_dims_index(int i) {
+    if (i < 0 || i > dims.size()-1){
+        throw std::invalid_argument("Invalid index!");
+    }
+    return dims[i];
 }
 
 float Matrix::get_index(int i) {
