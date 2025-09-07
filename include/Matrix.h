@@ -10,16 +10,16 @@ private:
     float* data;
     int* dims;
     int* dists;
-    int get_idx(int* pos);
+    int convert_idx(int* pos);
     int dim_len;
     float data_len;
     
     
 public:
 
-    Matrix(int* dims_n, int dim_len, float* data_n, int data_len);
+    Matrix(int* dims_n, int dim_len, float* data_n);
     Matrix(int* dims_n, int dim_len, int val);
-    Matrix matmul(int* this_axes, int len_this_a, Matrix other, int*other_axes, int len_other_a);
+    Matrix matmul(int* this_axes, Matrix other, int*other_axes, int len_a);
     void scmul(float s);
     void add(Matrix a);
     void subtract(Matrix a);
