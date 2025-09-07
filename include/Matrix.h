@@ -23,12 +23,13 @@ public:
     void scmul(float s);
     void add(Matrix a);
     void subtract(Matrix a);
-    void transpose();
+    void transpose(int* axes);
     float get(int* pos);
+    float get_index(int i);
     void set(int* pos, float val);
+    void set_index(int i, float val);
     int* get_full_dims();
     int get_dims_index(int i);
-    float get_index(int i);
 };
 
 #endif

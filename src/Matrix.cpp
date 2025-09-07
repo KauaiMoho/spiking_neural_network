@@ -76,7 +76,7 @@ int Matrix::get_idx(int* pos) {
     for (int i = 0; i < dim_len; i++) {
         idx += pos[i]*dists[i];
     }
-    if (idx > data_len || idx < 0) throw invalid_argument("Invalid position dimensions!");
+    if (idx > data_len - 1 || idx < 0) throw invalid_argument("Invalid position dimensions!");
     return idx;
 }
 
@@ -99,46 +99,43 @@ void Matrix::scmul(float s) {
 }
 
 void Matrix::add(Matrix a) {
-    if (a.get_full_dims() == dims) {
-        for (int i = 0; i < dim_len; i++) {
-            data[i] = data[i] + a.get_index(i);
+    for (int i = 0; i < dim_len; i++){
+        if (dims[i] != a.get_dims_index(i)) {
+            throw invalid_argument("Invalid matrix dimensions!");
         }
-    } else {
-        throw invalid_argument("Invalid matrix dimensions!");
+    }
+    for (int i = 0; i < data_len; i++) {
+        data[i] = data[i] + a.get_index(i);
     }
 }
 
 void Matrix::subtract(Matrix a) {
-    if (a.get_full_dims() == dims) {
-        for (int i = 0; i < dim_len; i++) {
-            data[i] = data[i] - a.get_index(i);
+    for (int i = 0; i < dim_len; i++){
+        if (dims[i] != a.get_dims_index(i)) {
+            throw invalid_argument("Invalid matrix dimensions!");
         }
-    } else {
-        throw invalid_argument("Invalid matrix dimensions!");
+    }
+    for (int i = 0; i < data_len; i++) {
+        data[i] = data[i] - a.get_index(i);
     }
 }
 
-void Matrix::transpose() {
-
+void Matrix::transpose(int* axes) {
+    int* dists_c = (int*) malloc(dim_len * sizeof(int));
+    if (dists_c == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+    for (int i = 0; i < dim_len; i++) {
+        dists_c[i] = dists[axes[i]];
+    }
+    for (int i = 0; i < dim_len; i++) {
+        dists[i] = dists_c[i];
+    }
+    free(dists_c);
 }
 
 float Matrix::get(int* pos) {
     return data[get_idx(pos)];
-}
-
-void Matrix::set(int* pos, float val) {
-    data[get_idx(pos)] = val;
-}
-
-int* Matrix::get_full_dims() {
-    return dims;
-}
-
-int Matrix::get_dims_index(int i) {
-    if (i < 0 || i > dim_len-1){
-        throw invalid_argument("Invalid index!");
-    }
-    return dims[i];
 }
 
 float Matrix::get_index(int i) {
@@ -146,4 +143,22 @@ float Matrix::get_index(int i) {
         throw invalid_argument("Invalid index!");
     }
     return data[i];
+}
+
+void Matrix::set(int* pos, float val) {
+    data[get_idx(pos)] = val;
+}
+
+void Matrix::set_index(int i, float val) {
+    if (i < 0 || i > dim_len-1){
+        throw invalid_argument("Invalid index!");
+    }
+    data[i] = val;
+}
+
+int Matrix::get_dims_index(int i) {
+    if (i < 0 || i > dim_len-1){
+        throw invalid_argument("Invalid index!");
+    }
+    return dims[i];
 }
