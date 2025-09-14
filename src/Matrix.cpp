@@ -6,6 +6,7 @@ using namespace std;
 
 Matrix::Matrix(int* dims_n, int dim_len, float* data_n) : dim_len(dim_len) {
     //Define the dists var here
+    //Assuming data/dims will be freed outside of constructor.
     if (dim_len == 0) throw invalid_argument("Matrix dimensions cannot be empty!");
     dists = (int*) malloc(dim_len * sizeof(int));
 
@@ -87,12 +88,34 @@ int Matrix::convert_idx(int* pos) {
     return idx;
 }
 
-Matrix Matrix::matmul(int* this_axes, Matrix other, int*other_axes, int len_a) {
-    for (int i = 0; i < len_a; i++) {
-        if (dims[this_axes[i]] != other.get_dims_index(other_axes[i])) {
-            throw invalid_argument("Invalid axes values!");
+Matrix Matrix::matmul(int* this_axes, Matrix other, int*other_axes, int len_this, int len_other) {
+   
+
+    if (other.get_dim_len() == 1 && dim_len == 1) {
+        //Dimension 1 x 1 = Dot product
+        if (other.get_dims_index(0) == dims[0]) {
+            float data_new = 0;
+            float* data_temp = other.get_data();
+            for (int i = 0; i < data_len; i++) {
+                data_new += data[i]*data_temp[i];
+            }
+            int* new_dims = new int[1]{1};
+            return Matrix(new_dims, 1, data_new);
+            free(new_dims);
         }
+        throw invalid_argument("Invalid dot product dimensions!");
+    } else if ((other.get_dim_len() == 1 && dim_len == 2)|| (other.get_dim_len() == 2 && dim_len == 1)) {
+         // dimension 2 x 1 = Vector Product
+
+    } else if (other.get_dim_len() == 2 && dim_len == 2) {
+        // Dimension 2 x 2 = Matrix multiplication
+
+    } else {
+         // Dimension n x n = Batched matrix multiplaction with broadcasting
+
     }
+    
+
     //implement matrix multiplaction here
 }   
 
@@ -165,4 +188,12 @@ int Matrix::get_dims_index(int i) {
         throw invalid_argument("Invalid index!");
     }
     return dims[i];
+}
+
+int Matrix::get_dim_len() {
+    return dim_len;
+}
+
+float* Matrix::get_data() {
+    return data;
 }
