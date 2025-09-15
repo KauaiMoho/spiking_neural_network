@@ -1,5 +1,6 @@
 #include "Matrix.h"
 using namespace std;
+using std::initializer_list;
 #include <stdexcept>
 #include <cstdlib>
 #include <iostream>
@@ -79,34 +80,92 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
     }
 }
 
-int Matrix::convert_idx(int* pos) {
+int Matrix::convert_idx(initializer_list<int> pos) {
     int idx = 0;
-    for (int i = 0; i < dim_len; i++) {
-        idx += pos[i]*dists[i];
+    int i = 0;
+    if (pos.size() != static_cast<size_t>(dim_len)) {
+        throw invalid_argument("Wrong number of indices!");
+    }
+    for (int value : pos) {
+        idx += value*dists[i];
+        ++i;
     }
     if (idx > data_len - 1 || idx < 0) throw invalid_argument("Invalid position dimensions!");
     return idx;
 }
 
-Matrix Matrix::matmul(int* this_axes, Matrix other, int*other_axes, int len_this, int len_other) {
-   
+//TODO: Write as CUDA Kernel in Future. - Need to change my current hardware to have CUDA enabled GPU.
+void Matrix::dotprod_cuda(float* A, float* B, float* C) {
+
+}
+
+Matrix Matrix::matmul(Matrix other) {
+    //Temporary CPU solution - will use a dot-product based CUDA accelerate solution once I get hardware
 
     if (other.get_dim_len() == 1 && dim_len == 1) {
         //Dimension 1 x 1 = Dot product
         if (other.get_dims_index(0) == dims[0]) {
-            float data_new = 0;
+            float data_out = 0;
             float* data_temp = other.get_data();
             for (int i = 0; i < data_len; i++) {
-                data_new += data[i]*data_temp[i];
+                data_out += data[i]*data_temp[i];
             }
-            int* new_dims = new int[1]{1};
-            return Matrix(new_dims, 1, data_new);
+            int* new_dims = (int*) malloc(sizeof(int));
+            Matrix ret = Matrix(new_dims, 1, data_out);
             free(new_dims);
+            return ret;
         }
         throw invalid_argument("Invalid dot product dimensions!");
-    } else if ((other.get_dim_len() == 1 && dim_len == 2)|| (other.get_dim_len() == 2 && dim_len == 1)) {
-         // dimension 2 x 1 = Vector Product
-
+    } else if (other.get_dim_len() == 1 && dim_len == 2) {
+        // dimension 2 x 1 = Vector Product
+        if (other.get_dims_index(0) == dims[1]) {
+            float* data_out = (float*) malloc(dims[0] * sizeof(float));
+            if (data_out == nullptr) {
+                throw invalid_argument("Memory allocation error");
+            }
+            for (int i = 0; i < dims[0]; i++) {
+                float sum = 0;
+                for (int j = 0; j < dims[1]; j++) {
+                    sum += get({i, j})*other.get({j});
+                }
+                data_out[i] = sum;
+            }
+            int* new_dims = (int*) malloc(sizeof(int));
+            if (new_dims == nullptr) {
+                throw invalid_argument("Memory allocation error");
+            }
+            new_dims[0] = dims[0];  
+            Matrix ret = Matrix(new_dims, 1, data_out);
+            free(new_dims);
+            free(data_out);
+            return ret;
+        }
+        throw invalid_argument("Invalid matrix-vector product dimensions!");
+    } else if (other.get_dim_len() == 2 && dim_len == 1) {
+        // dimension 1 x 2 = Vector Product
+        if (other.get_dims_index(1) == dims[0]) {
+            float* data_out = (float*) malloc(other.get_dims_index(0) * sizeof(float));
+            if (data_out == nullptr) {
+                throw invalid_argument("Memory allocation error");
+            }
+            for (int i = 0; i < other.get_dims_index(0); i++) {
+                float sum = 0;
+                for (int j = 0; j < dims[0]; j++) {
+                    sum += get({j})*other.get({i, j});
+                }
+                data_out[i] = sum;
+            }
+            int* new_dims = (int*) malloc(sizeof(int));
+            if (new_dims == nullptr) {
+                throw invalid_argument("Memory allocation error");
+            }
+            new_dims[0] = other.get_dims_index(0);
+            Matrix ret = Matrix(new_dims, 1, data_out);
+            free(new_dims);
+            free(data_out);
+            return ret;
+        }
+        throw invalid_argument("Invalid vector-matrix product dimensions!");
     } else if (other.get_dim_len() == 2 && dim_len == 2) {
         // Dimension 2 x 2 = Matrix multiplication
 
@@ -161,7 +220,7 @@ void Matrix::transpose(int* axes) {
     free(dists_c);
 }
 
-float Matrix::get(int* pos) {
+float Matrix::get(initializer_list<int> pos) {
     return data[convert_idx(pos)];
 }
 
@@ -172,7 +231,7 @@ float Matrix::get_index(int i) {
     return data[i];
 }
 
-void Matrix::set(int* pos, float val) {
+void Matrix::set(initializer_list<int> pos, float val) {
     data[convert_idx(pos)] = val;
 }
 

@@ -1,6 +1,7 @@
 #ifndef MATRIX_H
 #define MATRIX_H
-using namespace std;
+#include <initializer_list>
+using std::initializer_list;
 
 class Matrix {
 
@@ -10,7 +11,7 @@ private:
     float* data;
     int* dims;
     int* dists;
-    int convert_idx(int* pos);
+    int convert_idx(initializer_list<int> pos);
     int dim_len;
     float data_len;
     
@@ -19,14 +20,15 @@ public:
 
     Matrix(int* dims_n, int dim_len, float* data_n);
     Matrix(int* dims_n, int dim_len, int val);
-    Matrix matmul(int* this_axes, Matrix other, int*other_axes, int len_this, int len_other);
+    Matrix matmul(Matrix other);
+    void dotprod_cuda(float* A, float* B, float* C);
     void scmul(float s);
     void add(Matrix a);
     void subtract(Matrix a);
     void transpose(int* axes);
-    float get(int* pos);
+    float get(initializer_list<int> pos);
     float get_index(int i);
-    void set(int* pos, float val);
+    void set(initializer_list<int> pos, float val);
     void set_index(int i, float val);
     int* get_full_dims();
     int get_dims_index(int i);
