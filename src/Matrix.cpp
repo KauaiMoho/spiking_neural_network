@@ -246,7 +246,8 @@ Matrix Matrix::matmul(Matrix other) {
         }
         throw invalid_argument("Invalid matrix-matrix product dimensions!");
     } else {
-         // Dimension n x n = Batched matrix multiplaction with broadcasting
+        // Dimension n x n = Batched matrix multiplaction with broadcasting
+        //Will perform This X Other, batched
 
     }
     
