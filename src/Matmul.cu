@@ -1,4 +1,4 @@
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
 
 //Need to get hardware capable for testing.
 
@@ -9,8 +9,8 @@
 //Stride A = m
 //Stride B = k
 //Stride C = k
-
-__global__ void matmul_kernel(float* A, float* B, float* C, int n, int m, int k) {
+//Add __global__ tag once I find device compatible with nvcc
+void matmul_kernel(float* A, float* B, float* C, int n, int m, int k) {
     //TODO: Tiling, handle matmul of A and B into C
     //Sychronize multiple threads handling matmul for each reigon
 }

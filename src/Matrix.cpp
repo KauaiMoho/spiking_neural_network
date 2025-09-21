@@ -35,7 +35,6 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n) : dim_len(dim_len) {
     data_len = pos*dims[0];
 
     data = (float*) malloc(data_len * sizeof(float));
-
     if (data == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
@@ -66,17 +65,14 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
         dims[i] = dims_n[i];
         pos *= dims[i];
     }
-
-    data = (float*) malloc(data_len * sizeof(float));
-
-    if (data == nullptr) {
-        throw invalid_argument("Memory allocation error");
-    }
-
     dims[0] = dims_n[0];
     dists[0] = pos;
     data_len = pos*dims[0];
 
+    data = (float*) malloc(data_len * sizeof(float));
+    if (data == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
 
     for (int i = 0; i < data_len; i++) {
         data[i] = val;
@@ -97,8 +93,10 @@ int Matrix::convert_idx(initializer_list<int> pos) {
     return idx;
 }
 
+
 void Matrix::matmul_cuda(float* A, float* B, float* C, int n, int m, int k) {
-    ::matmul_cuda(A, B, C, n, m, k);
+    //TODO: Uncomment after compiling with nvcc
+    //::matmul_cuda(A, B, C, n, m, k);
 }
 
 //A = nxm
@@ -314,14 +312,14 @@ void Matrix::set(initializer_list<int> pos, float val) {
 }
 
 void Matrix::set_index(int i, float val) {
-    if (i < 0 || i > data_len-1){
+    if (i < 0 || i > data_len-1) {
         throw invalid_argument("Invalid index!");
     }
     data[i] = val;
 }
 
 int Matrix::get_dims_index(int i) {
-    if (i < 0 || i > dim_len-1){
+    if (i < 0 || i > dim_len-1) {
         throw invalid_argument("Invalid index!");
     }
     return dims[i];
