@@ -3,7 +3,7 @@
 using namespace std;
 
 int main() {
-
+    Matrix::set_CUDA(false);
     int dim1[] = {13};
     int dim2[] = {11, 13};
     Matrix m = Matrix(dim1, 1, 10);

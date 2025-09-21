@@ -11,17 +11,20 @@ private:
     float* data;
     int* dims;
     int* dists;
-    int convert_idx(initializer_list<int> pos);
     int dim_len;
     float data_len;
+    static bool cuda;
     
+    int convert_idx(initializer_list<int> pos);
+    void matmul_cuda(float* A, float* B, float* C, int n, int m, int k);
+    void matmul_cpu(float* A, float* B, float* C, int n, int m, int k);
     
 public:
 
+    
     Matrix(int* dims_n, int dim_len, float* data_n);
     Matrix(int* dims_n, int dim_len, int val);
     Matrix matmul(Matrix other);
-    void dotprod_cuda(float* A, float* B, float* C);
     void scmul(float s);
     void add(Matrix a);
     void subtract(Matrix a);
@@ -34,6 +37,11 @@ public:
     int get_dims_index(int i);
     int get_dim_len();
     float* get_data();
+    static void set_CUDA(bool c);
+    static bool get_CUDA();
+    
 };
+
+extern "C" void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k);
 
 #endif
