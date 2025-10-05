@@ -93,6 +93,43 @@ int Matrix::convert_idx(initializer_list<int> pos) {
     return idx;
 }
 
+int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) {
+    //Dim_len_new will always be >= dim_len
+    int* dists_new = (int*) malloc(dim_len_new * sizeof(int));
+    int diff = dim_len_new - dim_len;
+    if (dists_new == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+
+    for (int i = dim_len_new - 1; i >= 0 ; i--) {
+        int i_old = i - diff;
+        if (i_old < 0) { 
+            dists_new[i] = 0;
+        } else {
+            if (dims[i_old] == dims_new[i]) {
+                dists_new[i] = dists[i_old];
+            } else if (dims[i_old] == 1) {
+                dists_new[i] = 0;
+            } else {
+                free(dists_new);
+                throw invalid_argument("Incompatible dimensions for broadcasting!");
+            }
+        }
+    }
+
+    return dists_new;
+}
+
+void Matrix::broadcast(int* dims_new, int dim_len_new) {
+    //Dim_len_new will always be >= dim_len
+    int* dists_new = get_broadcasted_strides(dims_new, dim_len_new);
+    free(dists);
+    free(dims);
+    dists = dists_new;
+    dims = dims_new;
+    dim_len = dim_len_new;
+}
+
 
 void Matrix::matmul_cuda(float* A, float* B, float* C, int n, int m, int k) {
     //TODO: Uncomment after compiling with nvcc
@@ -245,15 +282,67 @@ Matrix Matrix::matmul(Matrix other) {
             return ret;
         }
         throw invalid_argument("Invalid matrix-matrix product dimensions!");
-    } else {
+    } else if (other.get_dim_len() >= 2 && dim_len >= 2) {
         // Dimension n x n = Batched matrix multiplaction with broadcasting
         //Will perform This X Other, batched
+        int other_dim_len = other.get_dim_len();
+        if (dims[dim_len-1] == other.get_dims_index(other_dim_len - 2)) {
+            int broadcast_dim_len = max(dim_len, other_dim_len);
+            int* broadcast_dims = (int*) malloc(broadcast_dim_len * sizeof(int));
+            if (broadcast_dims == nullptr) {
+                throw invalid_argument("Memory allocation error");
+            }
+            if (dim_len >= other_dim_len) {
+                int diff = broadcast_dim_len - other_dim_len;
+                for (int i = dim_len - 3; i >= 0 ; i--) {
+                    int i_other = i - diff;
+                    if (i_other < 0) { 
+                        broadcast_dims[i] = dims[i];
+                    } else {
+                        int other_dim = other.get_dims_index(i_other);
+                        if (dims[i] == other_dim || other_dim == 1) {
+                            broadcast_dims[i] = dims[i];
+                        } else if (dims[i] == 1) {
+                            broadcast_dims[i] = other_dim;
+                        } else {
+                            free(broadcast_dims);
+                            throw invalid_argument("Incompatible dimensions for matmul batch broadcasting!");
+                        }
+                    }
+                }
+            } else {
+                int diff = broadcast_dim_len - dim_len;
+                for (int i = other_dim_len - 3; i >= 0 ; i--) {
+                    int other_dim = other.get_dims_index(i);
+                    int i_this = i - diff;
+                    if (i_this < 0) { 
+                        broadcast_dims[i] = other_dim;
+                    } else {
+                        if (dims[i_this] == other_dim || other_dim == 1) {
+                            broadcast_dims[i] = dims[i];
+                        } else if (dims[i_this] == 1) {
+                            broadcast_dims[i] = other_dim;
+                        } else {
+                            free(broadcast_dims);
+                            throw invalid_argument("Incompatible dimensions for matmul batch broadcasting!");
+                        }
+                    }
+                }
+            }
 
+            //TODO Apply batched dimensions for matmul
+
+
+
+        } else {
+            throw invalid_argument("Invalid batched matrix-matrix product dimensions!");
+        }
     }
-    
-
-    //implement matrix multiplaction here
 }   
+
+Matrix Matrix::clone() {
+    return Matrix(dims, dim_len, data);
+}
 
 void Matrix::scmul(float s) {
     for (int i = 0; i < data_len; i++) {
