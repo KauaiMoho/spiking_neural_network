@@ -93,6 +93,8 @@ int Matrix::convert_idx(initializer_list<int> pos) {
     return idx;
 }
 
+
+
 int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) {
     //Dim_len_new will always be >= dim_len
     int* dists_new = (int*) malloc(dim_len_new * sizeof(int));
@@ -120,14 +122,60 @@ int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) {
     return dists_new;
 }
 
+void Matrix::reshape(int* dims_new, int dim_len_new) {
+    //Dims_new must multiply into same size as dims_old
+    int dim_size_old = 1;
+    for (int i = 0; i < dim_len_new; i++) {
+        dim_size_old *= dims[i];
+    }
+    int dim_size_new = 1;
+    for (int i = 0; i < dim_len_new; i++) {
+        dim_size_new *= dims_new[i];
+    }
+    if (dim_size_old == dim_size_new) {
+        free(dists);
+        dists = (int*) malloc(dim_len_new * sizeof(int));
+        if (dists == nullptr) {
+            throw invalid_argument("Memory allocation error");
+        }
+        free(dims);
+        dims = (int*) malloc(dim_len_new * sizeof(int));
+        if (dims == nullptr) {
+            throw invalid_argument("Memory allocation error");
+        }
+        int pos = 1;
+        for (int i = dim_len_new - 1; i > 0 ; i--) {
+            dists[i] = pos;
+            dims[i] = dims_new[i];
+            pos *= dims[i];
+        }
+        dims[0] = dims_new[0];
+        dists[0] = pos;
+        dim_len = dim_len_new;
+    } else {
+        throw invalid_argument("Invalid dimension size for reshape!");
+    }
+}
+
+
 void Matrix::broadcast(int* dims_new, int dim_len_new) {
-    //Dim_len_new will always be >= dim_len
-    int* dists_new = get_broadcasted_strides(dims_new, dim_len_new);
-    free(dists);
-    free(dims);
-    dists = dists_new;
-    dims = dims_new;
-    dim_len = dim_len_new;
+    //Dim_len_new must always be >= dim_len
+    if (!(dim_len_new >= dim_len)) {
+        int* dists_new = get_broadcasted_strides(dims_new, dim_len_new);
+        free(dists);
+        free(dims);
+        dists = dists_new;
+        dims = (int*) malloc(dim_len_new * sizeof(int));
+        if (dims == nullptr) {
+            throw invalid_argument("Memory allocation error");
+        }
+        for (int i = 0; i < dim_len_new; i++) {
+            dims[i] = dims_new[i];
+        }
+        dim_len = dim_len_new;
+    } else {
+        throw invalid_argument("Invalid dimension size for broadcasting!");
+    }
 }
 
 
@@ -329,10 +377,40 @@ Matrix Matrix::matmul(Matrix other) {
                     }
                 }
             }
+            int* bmm_shape = (int*) malloc(3 * sizeof(int));
+            if (bmm_shape == nullptr) {
+                throw invalid_argument("Memory allocation error");
+            }
+            bmm_shape[0] = 1;
+            bmm_shape[1] = dims[dim_len-2];
+            bmm_shape[2] = other.get_dims_index(other_dim_len - 1);
+            for (int i = 0; i < broadcast_dim_len - 2; i++) {
+                bmm_shape[0] *= broadcast_dims[i];
+            }
 
-            //TODO Apply batched dimensions for matmul
+            //Save old dimensions, do not free
+            int dim_len_this = dim_len;
+            int dim_len_other = other.get_dim_len();
+            int* dims_clone_this = get_dims_clone();
+            int* dims_clone_other = other.get_dims_clone();
+            int* dists_clone_this = get_dists_clone();
+            int* dists_clone_other = other.get_dists_clone();
+            
+            //Broadcast and reshape, might want to make it so this can be done outside - seperate function
+            broadcast(broadcast_dims, broadcast_dim_len);
+            other.broadcast(broadcast_dims, broadcast_dim_len);
+            reshape(bmm_shape, 3);
+            other.reshape(bmm_shape, 3);
+
+            //NOW MATMUL
 
 
+            dim_len = dim_len_this;
+            dims = dims_clone_this;
+            dists = dists_clone_this;
+            other.set_dim_len(dim_len_other);
+            other.set_dims(dims_clone_other);
+            other.set_dists(dists_clone_other);
 
         } else {
             throw invalid_argument("Invalid batched matrix-matrix product dimensions!");
@@ -417,6 +495,42 @@ int Matrix::get_dims_index(int i) {
 
 int Matrix::get_dim_len() {
     return dim_len;
+}
+
+int* Matrix::get_dists_clone() {
+    int* dists_clone = (int*) malloc(dim_len * sizeof(int));
+    if (dists_clone == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+    for (int i = 0; i < dim_len; i++) {
+        dists_clone[i] = dists[i];
+    }
+    return dists_clone;
+}
+
+int* Matrix::get_dims_clone() {
+    int* dims_clone = (int*) malloc(dim_len * sizeof(int));
+    if (dims_clone == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+    for (int i = 0; i < dim_len; i++) {
+        dims_clone[i] = dims[i];
+    }
+    return dims_clone;
+}
+
+void Matrix::set_dim_len(int dim_len_n) {
+    dim_len = dim_len_n;
+}
+
+void Matrix::set_dims(int* dims_n) {
+    //UNCHECKED, INTERNAL BMM USE ONLY
+    dims = dims_n;
+}
+
+void Matrix::set_dists(int* dists_n) {
+    //UNCHECKED, INTERNAL BMM USE ONLY
+    dists = dists_n;
 }
 
 float* Matrix::get_data() {

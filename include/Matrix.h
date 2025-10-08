@@ -35,10 +35,16 @@ public:
     void set(initializer_list<int> pos, float val);
     void set_index(int i, float val);
     void broadcast(int* dim, int dim_len);
+    void reshape(int* dims_new, int dim_len_new);
     int* get_broadcasted_strides(int* dims_new, int dim_len_new);
     int* get_full_dims();
     int get_dims_index(int i);
     int get_dim_len();
+    int* get_dims_clone();
+    int* get_dists_clone();
+    void set_dim_len(int dim_len_n); // UNCHECKED
+    void set_dims(int* dims_n); // UNCHECKED
+    void set_dists(int* dists_n); // UNCHECKED
     float* get_data();
     static void set_CUDA(bool c);
     static bool get_CUDA();
