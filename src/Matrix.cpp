@@ -397,6 +397,8 @@ Matrix Matrix::matmul(Matrix other) {
             int* dists_clone_other = other.get_dists_clone();
             
             //Broadcast and reshape, might want to make it so this can be done outside - seperate function
+
+            //NEED TO MAKE SURE LAST TWO DIMS UNTOUCHED IN BROADCAST
             broadcast(broadcast_dims, broadcast_dim_len);
             other.broadcast(broadcast_dims, broadcast_dim_len);
             reshape(bmm_shape, 3);
