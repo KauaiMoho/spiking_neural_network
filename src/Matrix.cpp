@@ -125,7 +125,7 @@ int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) {
 void Matrix::reshape(int* dims_new, int dim_len_new) {
     //Dims_new must multiply into same size as dims_old
     int dim_size_old = 1;
-    for (int i = 0; i < dim_len_new; i++) {
+    for (int i = 0; i < dim_len; i++) {
         dim_size_old *= dims[i];
     }
     int dim_size_new = 1;
@@ -160,7 +160,7 @@ void Matrix::reshape(int* dims_new, int dim_len_new) {
 
 void Matrix::broadcast(int* dims_new, int dim_len_new) {
     //Dim_len_new must always be >= dim_len
-    if (!(dim_len_new >= dim_len)) {
+    if (dim_len_new >= dim_len) {
         int* dists_new = get_broadcasted_strides(dims_new, dim_len_new);
         free(dists);
         free(dims);
@@ -382,8 +382,6 @@ Matrix Matrix::matmul(Matrix other) {
                 throw invalid_argument("Memory allocation error");
             }
             bmm_shape[0] = 1;
-            bmm_shape[1] = dims[dim_len-2];
-            bmm_shape[2] = other.get_dims_index(other_dim_len - 1);
             for (int i = 0; i < broadcast_dim_len - 2; i++) {
                 bmm_shape[0] *= broadcast_dims[i];
             }
@@ -397,15 +395,35 @@ Matrix Matrix::matmul(Matrix other) {
             int* dists_clone_other = other.get_dists_clone();
             
             //Broadcast and reshape, might want to make it so this can be done outside - seperate function
-
-            //NEED TO MAKE SURE LAST TWO DIMS UNTOUCHED IN BROADCAST
+            broadcast_dims[broadcast_dim_len - 2] = dims[dim_len - 2];
+            broadcast_dims[broadcast_dim_len - 1] = dims[dim_len - 1];
             broadcast(broadcast_dims, broadcast_dim_len);
+
+            broadcast_dims[broadcast_dim_len - 2] = other.get_dims_index(other_dim_len - 2);
+            broadcast_dims[broadcast_dim_len - 1] = other.get_dims_index(other_dim_len - 1);
             other.broadcast(broadcast_dims, broadcast_dim_len);
+            
+            bmm_shape[1] = dims[broadcast_dim_len - 2];
+            bmm_shape[2] = dims[broadcast_dim_len - 1];
             reshape(bmm_shape, 3);
+            bmm_shape[1] = other.get_dims_index(broadcast_dim_len - 2);
+            bmm_shape[2] = other.get_dims_index(broadcast_dim_len - 1);
             other.reshape(bmm_shape, 3);
 
             //NOW MATMUL
-
+            cout << other.get_dims_index(0);
+            cout << '\n';
+            cout << other.get_dims_index(1);
+            cout << '\n';
+            cout << other.get_dims_index(2);
+            cout << '\n';
+            cout << '\n';
+            cout << get_dims_index(0);
+            cout << '\n';
+            cout << get_dims_index(1);
+            cout << '\n';
+            cout << get_dims_index(2);
+            cout << '\n';
 
             dim_len = dim_len_this;
             dims = dims_clone_this;
@@ -413,6 +431,8 @@ Matrix Matrix::matmul(Matrix other) {
             other.set_dim_len(dim_len_other);
             other.set_dims(dims_clone_other);
             other.set_dists(dists_clone_other);
+
+            return clone();
 
         } else {
             throw invalid_argument("Invalid batched matrix-matrix product dimensions!");
@@ -537,6 +557,13 @@ void Matrix::set_dists(int* dists_n) {
 
 float* Matrix::get_data() {
     return data;
+}
+
+void Matrix::print_dims() {
+    for (int i = 0; i < dim_len; i++) {
+        cout << dims[i];
+        cout << " ";
+    }
 }
 
 void Matrix::set_CUDA(bool c) {

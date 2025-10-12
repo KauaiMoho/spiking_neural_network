@@ -20,7 +20,6 @@ private:
     void matmul_cpu(float* A, float* B, float* C, int n, int m, int k);
     
 public:
-
     
     Matrix(int* dims_n, int dim_len, float* data_n);
     Matrix(int* dims_n, int dim_len, int val);
@@ -46,6 +45,7 @@ public:
     void set_dims(int* dims_n); // UNCHECKED
     void set_dists(int* dists_n); // UNCHECKED
     float* get_data();
+    void print_dims();
     static void set_CUDA(bool c);
     static bool get_CUDA();
     
