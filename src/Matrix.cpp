@@ -406,24 +406,12 @@ Matrix Matrix::matmul(Matrix other) {
             bmm_shape[1] = dims[broadcast_dim_len - 2];
             bmm_shape[2] = dims[broadcast_dim_len - 1];
             reshape(bmm_shape, 3);
+
             bmm_shape[1] = other.get_dims_index(broadcast_dim_len - 2);
             bmm_shape[2] = other.get_dims_index(broadcast_dim_len - 1);
             other.reshape(bmm_shape, 3);
 
             //NOW MATMUL
-            cout << other.get_dims_index(0);
-            cout << '\n';
-            cout << other.get_dims_index(1);
-            cout << '\n';
-            cout << other.get_dims_index(2);
-            cout << '\n';
-            cout << '\n';
-            cout << get_dims_index(0);
-            cout << '\n';
-            cout << get_dims_index(1);
-            cout << '\n';
-            cout << get_dims_index(2);
-            cout << '\n';
 
             dim_len = dim_len_this;
             dims = dims_clone_this;
