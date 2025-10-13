@@ -4,6 +4,7 @@ using std::initializer_list;
 #include <stdexcept>
 #include <cstdlib>
 #include <iostream>
+#include <thread>
 
 //Default do not use CUDA
 bool Matrix::cuda = false;
@@ -39,7 +40,7 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n) : dim_len(dim_len) {
         throw invalid_argument("Memory allocation error");
     }
 
-    for (int i = 0; i < data_len; i++) {
+    for (int i = 0; i < data_len; ++i) {
         data[i] = data_n[i];
     }
 }
@@ -74,7 +75,7 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
         throw invalid_argument("Memory allocation error");
     }
 
-    for (int i = 0; i < data_len; i++) {
+    for (int i = 0; i < data_len; ++i) {
         data[i] = val;
     }
 }
@@ -92,8 +93,6 @@ int Matrix::convert_idx(initializer_list<int> pos) {
     if (idx > data_len - 1 || idx < 0) throw invalid_argument("Invalid position dimensions!");
     return idx;
 }
-
-
 
 int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) {
     //Dim_len_new will always be >= dim_len
@@ -125,11 +124,11 @@ int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) {
 void Matrix::reshape(int* dims_new, int dim_len_new) {
     //Dims_new must multiply into same size as dims_old
     int dim_size_old = 1;
-    for (int i = 0; i < dim_len; i++) {
+    for (int i = 0; i < dim_len; ++i) {
         dim_size_old *= dims[i];
     }
     int dim_size_new = 1;
-    for (int i = 0; i < dim_len_new; i++) {
+    for (int i = 0; i < dim_len_new; ++i) {
         dim_size_new *= dims_new[i];
     }
     if (dim_size_old == dim_size_new) {
@@ -152,11 +151,10 @@ void Matrix::reshape(int* dims_new, int dim_len_new) {
         dims[0] = dims_new[0];
         dists[0] = pos;
         dim_len = dim_len_new;
-    } else {
+    } else {    
         throw invalid_argument("Invalid dimension size for reshape!");
     }
 }
-
 
 void Matrix::broadcast(int* dims_new, int dim_len_new) {
     //Dim_len_new must always be >= dim_len
@@ -169,7 +167,7 @@ void Matrix::broadcast(int* dims_new, int dim_len_new) {
         if (dims == nullptr) {
             throw invalid_argument("Memory allocation error");
         }
-        for (int i = 0; i < dim_len_new; i++) {
+        for (int i = 0; i < dim_len_new; ++i) {
             dims[i] = dims_new[i];
         }
         dim_len = dim_len_new;
@@ -178,6 +176,48 @@ void Matrix::broadcast(int* dims_new, int dim_len_new) {
     }
 }
 
+void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int k, int z) {
+
+    //Use loop order to optimize L Cache loading.
+    //Use sysctl -a | grep cache to check Apple Silicon Cache Size
+
+    constexpr size_t L1_bytes = 64 * 1024;
+    constexpr size_t L2_bytes = 4 * 1024 * 1024;
+    constexpr int cache_line_floats = 32;
+    size_t matrix_size_floats = (static_cast<size_t>(n)*m) + (static_cast<size_t>(m)*k) + (static_cast<size_t>(n)*k);
+
+    //Choose between L1 and L2 cache based on matrix size
+    size_t usable_cache_bytes;
+    if (matrix_size_floats * sizeof(float) <= L1_bytes) {
+        usable_cache_bytes = L1_bytes / 1.5;
+    } else {
+        usable_cache_bytes = L2_bytes / 1.5;
+    }
+
+    size_t usable_cache_floats = usable_cache_bytes / sizeof(float);
+
+    //Assumption of near square matrices
+    int tile = static_cast<int>(sqrt(usable_cache_floats / 3));
+    tile = tile & ~(cache_line_floats - 1);
+    if (tile == 0) {
+        tile = cache_line_floats;
+    }
+
+    for (int ic = 0; ic < n; ic += tile){
+        for (int jc = 0; jc < m; jc += tile){
+            for (int lc = 0; lc < k; lc += tile){
+                for (int i = ic; i < min(ic+tile, n); ++i){
+                    for (int j = jc; j < min(jc+tile, m); ++j) {
+                        float first = A[n*m*z + i*m + j];
+                        for (int l = lc; l < min(lc+tile, k); ++l){
+                            C[n*k*z + i*k + l] += first * B[m*k*z + j*k + l];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 void Matrix::matmul_cuda(float* A, float* B, float* C, int n, int m, int k) {
     //TODO: Uncomment after compiling with nvcc
@@ -221,10 +261,10 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
     for (int ic = 0; ic < n; ic += tile){
         for (int jc = 0; jc < m; jc += tile){
             for (int lc = 0; lc < k; lc += tile){
-                for (int i = ic; i < min(ic+tile, n); i++){
-                    for (int j = jc; j < min(jc+tile, m); j++) {
+                for (int i = ic; i < min(ic+tile, n); ++i){
+                    for (int j = jc; j < min(jc+tile, m); ++j) {
                         float first = A[i*m + j];
-                        for (int l = lc; l < min(lc+tile, k); l++){
+                        for (int l = lc; l < min(lc+tile, k); ++l){
                             C[i*k + l] += first * B[j*k + l];
                         }
                     }
@@ -246,7 +286,7 @@ Matrix Matrix::matmul(Matrix other) {
             new_dims[0] = 1;
             float data_out = 0;
             float* data_temp = other.get_data();
-            for (int i = 0; i < data_len; i++) {
+            for (int i = 0; i < data_len; ++i) {
                 data_out += data[i]*data_temp[i];
             }
             Matrix ret = Matrix(new_dims, 1, data_out);
@@ -266,9 +306,9 @@ Matrix Matrix::matmul(Matrix other) {
             if (data_out == nullptr) {
                 throw invalid_argument("Memory allocation error");
             }
-            for (int i = 0; i < new_dims[0]; i++) {
+            for (int i = 0; i < new_dims[0]; ++i) {
                 float sum = 0;
-                for (int j = 0; j < dims[1]; j++) {
+                for (int j = 0; j < dims[1]; ++j) {
                     sum += get({i, j})*other.get({j});
                 }
                 data_out[i] = sum;
@@ -291,9 +331,9 @@ Matrix Matrix::matmul(Matrix other) {
             if (data_out == nullptr) {
                 throw invalid_argument("Memory allocation error");
             }
-            for (int i = 0; i < new_dims[0]; i++) {
+            for (int i = 0; i < new_dims[0]; ++i) {
                 float sum = 0;
-                for (int j = 0; j < dims[0]; j++) {
+                for (int j = 0; j < dims[0]; ++j) {
                     sum += get({j})*other.get({i, j});
                 }
                 data_out[i] = sum;
@@ -382,7 +422,7 @@ Matrix Matrix::matmul(Matrix other) {
                 throw invalid_argument("Memory allocation error");
             }
             bmm_shape[0] = 1;
-            for (int i = 0; i < broadcast_dim_len - 2; i++) {
+            for (int i = 0; i < broadcast_dim_len - 2; ++i) {
                 bmm_shape[0] *= broadcast_dims[i];
             }
 
@@ -402,6 +442,7 @@ Matrix Matrix::matmul(Matrix other) {
             broadcast_dims[broadcast_dim_len - 2] = other.get_dims_index(other_dim_len - 2);
             broadcast_dims[broadcast_dim_len - 1] = other.get_dims_index(other_dim_len - 1);
             other.broadcast(broadcast_dims, broadcast_dim_len);
+            free(broadcast_dims);
             
             bmm_shape[1] = dims[broadcast_dim_len - 2];
             bmm_shape[2] = dims[broadcast_dim_len - 1];
@@ -410,18 +451,41 @@ Matrix Matrix::matmul(Matrix other) {
             bmm_shape[1] = other.get_dims_index(broadcast_dim_len - 2);
             bmm_shape[2] = other.get_dims_index(broadcast_dim_len - 1);
             other.reshape(bmm_shape, 3);
+            bmm_shape[1] = dims[1];
 
             //NOW MATMUL
+            int n_threads = thread::hardware_concurrency();
+            thread* threads = new thread[bmm_shape[0]];
 
+            float* data_out = (float*) malloc(bmm_shape[0] * dims[dim_len - 2] * bmm_shape[2] * sizeof(float));
+            if (data_out == nullptr) {
+                throw invalid_argument("Memory allocation error");
+            } 
+
+            for (int t = 0; t < n_threads; ++t) {
+                threads[t] = thread([&, t]() {
+                for (int i = t; i < bmm_shape[0]; i += n_threads) {
+                    matmul_cpu_batched(data, other.get_data(), data_out, dims[dim_len - 2],
+                                    dims[dim_len - 1], bmm_shape[2], i);
+                }
+            });
+}
+            for (int i = 0; i < n_threads; ++i) {
+                threads[i].join();
+            }
+
+            delete[] threads;
+
+            Matrix ret = Matrix(bmm_shape, 3, data_out);
             dim_len = dim_len_this;
             dims = dims_clone_this;
             dists = dists_clone_this;
             other.set_dim_len(dim_len_other);
             other.set_dims(dims_clone_other);
             other.set_dists(dists_clone_other);
-
-            return clone();
-
+            free(bmm_shape);
+            free(data_out);
+            return ret;
         } else {
             throw invalid_argument("Invalid batched matrix-matrix product dimensions!");
         }
@@ -433,29 +497,29 @@ Matrix Matrix::clone() {
 }
 
 void Matrix::scmul(float s) {
-    for (int i = 0; i < data_len; i++) {
+    for (int i = 0; i < data_len; ++i) {
         data[i] = data[i] * s;
     }
 }
 
 void Matrix::add(Matrix a) {
-    for (int i = 0; i < dim_len; i++){
+    for (int i = 0; i < dim_len; ++i){
         if (dims[i] != a.get_dims_index(i)) {
             throw invalid_argument("Invalid matrix dimensions!");
         }
     }
-    for (int i = 0; i < data_len; i++) {
+    for (int i = 0; i < data_len; ++i) {
         data[i] = data[i] + a.get_index(i);
     }
 }
 
 void Matrix::subtract(Matrix a) {
-    for (int i = 0; i < dim_len; i++){
+    for (int i = 0; i < dim_len; ++i){
         if (dims[i] != a.get_dims_index(i)) {
             throw invalid_argument("Invalid matrix dimensions!");
         }
     }
-    for (int i = 0; i < data_len; i++) {
+    for (int i = 0; i < data_len; ++i) {
         data[i] = data[i] - a.get_index(i);
     }
 }
@@ -465,10 +529,10 @@ void Matrix::transpose(int* axes) {
     if (dists_c == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
-    for (int i = 0; i < dim_len; i++) {
+    for (int i = 0; i < dim_len; ++i) {
         dists_c[i] = dists[axes[i]];
     }
-    for (int i = 0; i < dim_len; i++) {
+    for (int i = 0; i < dim_len; ++i) {
         dists[i] = dists_c[i];
     }
     free(dists_c);
@@ -512,7 +576,7 @@ int* Matrix::get_dists_clone() {
     if (dists_clone == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
-    for (int i = 0; i < dim_len; i++) {
+    for (int i = 0; i < dim_len; ++i) {
         dists_clone[i] = dists[i];
     }
     return dists_clone;
@@ -523,7 +587,7 @@ int* Matrix::get_dims_clone() {
     if (dims_clone == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
-    for (int i = 0; i < dim_len; i++) {
+    for (int i = 0; i < dim_len; ++i) {
         dims_clone[i] = dims[i];
     }
     return dims_clone;
@@ -548,10 +612,11 @@ float* Matrix::get_data() {
 }
 
 void Matrix::print_dims() {
-    for (int i = 0; i < dim_len; i++) {
+    for (int i = 0; i < dim_len; ++i) {
         cout << dims[i];
         cout << " ";
     }
+    cout << "\n";
 }
 
 void Matrix::set_CUDA(bool c) {

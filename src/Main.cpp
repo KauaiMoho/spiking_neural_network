@@ -9,9 +9,7 @@ int main() {
     Matrix m = Matrix(dim1, 7, 10);
     Matrix b = Matrix(dim2, 5, 12);
     Matrix c = m.matmul(b);
-    // cout << c.get_dims_index(0);
-    // cout << '\n';
-    // cout << c.get_dims_index(1);
-    // cout << '\n';
-    // cout << c.get({0, 2});
+    c.print_dims();
+    cout << c.get({0, 0, 2});
+    cout << '\n';
 }
