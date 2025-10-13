@@ -15,11 +15,10 @@ private:
     float data_len;
     static bool cuda;
     
-    int convert_idx(initializer_list<int> pos);
-    static 
+    int convert_idx(initializer_list<int> pos); 
     void matmul_cuda(float* A, float* B, float* C, int n, int m, int k);
-    static void matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int k, int z);
-    static void matmul_cpu(float* A, float* B, float* C, int n, int m, int k);
+    void matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int k, int z);
+    void matmul_cpu(float* A, float* B, float* C, int n, int m, int k);
     
 public:
     

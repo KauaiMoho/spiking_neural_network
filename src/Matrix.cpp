@@ -407,7 +407,7 @@ Matrix Matrix::matmul(Matrix other) {
                         broadcast_dims[i] = other_dim;
                     } else {
                         if (dims[i_this] == other_dim || other_dim == 1) {
-                            broadcast_dims[i] = dims[i];
+                            broadcast_dims[i] = dims[i_this];
                         } else if (dims[i_this] == 1) {
                             broadcast_dims[i] = other_dim;
                         } else {
@@ -434,7 +434,7 @@ Matrix Matrix::matmul(Matrix other) {
             int* dists_clone_this = get_dists_clone();
             int* dists_clone_other = other.get_dists_clone();
             
-            //Broadcast and reshape, might want to make it so this can be done outside - seperate function
+            //Broadcast and reshape
             broadcast_dims[broadcast_dim_len - 2] = dims[dim_len - 2];
             broadcast_dims[broadcast_dim_len - 1] = dims[dim_len - 1];
             broadcast(broadcast_dims, broadcast_dim_len);
@@ -453,8 +453,10 @@ Matrix Matrix::matmul(Matrix other) {
             other.reshape(bmm_shape, 3);
             bmm_shape[1] = dims[1];
 
-            //NOW MATMUL
+            //matmul
             int n_threads = thread::hardware_concurrency();
+
+            //Avoid malloc to call constructor
             thread* threads = new thread[bmm_shape[0]];
 
             float* data_out = (float*) malloc(bmm_shape[0] * dims[dim_len - 2] * bmm_shape[2] * sizeof(float));
@@ -477,14 +479,16 @@ Matrix Matrix::matmul(Matrix other) {
             delete[] threads;
 
             Matrix ret = Matrix(bmm_shape, 3, data_out);
+            free(data_out);
+            free(bmm_shape);
+
             dim_len = dim_len_this;
             dims = dims_clone_this;
             dists = dists_clone_this;
             other.set_dim_len(dim_len_other);
             other.set_dims(dims_clone_other);
             other.set_dists(dists_clone_other);
-            free(bmm_shape);
-            free(data_out);
+
             return ret;
         } else {
             throw invalid_argument("Invalid batched matrix-matrix product dimensions!");
