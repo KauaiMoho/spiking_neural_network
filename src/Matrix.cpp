@@ -5,6 +5,10 @@ using std::initializer_list;
 #include <cstdlib>
 #include <iostream>
 #include <thread>
+#include <arm_neon.h>
+
+//TODO
+// CHANGE MAIN VECTOR OPERATIONS TO USE SIMD - Single Instruction, Multiple Data
 
 //Default do not use CUDA
 bool Matrix::cuda = false;
@@ -181,6 +185,13 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
     //Use loop order to optimize L Cache loading.
     //Use sysctl -a | grep cache to check Apple Silicon Cache Size
 
+    printf("Address of A ptr: %p\n", (void*)A);
+    printf("Address of A ptr[0]: %p\n", (void*)&A[0]);
+    printf("Address of B ptr: %p\n", (void*)B);
+    printf("Address of B ptr[0]: %p\n", (void*)&B[0]);
+    printf("Address of C ptr: %p\n", (void*)C);
+    printf("Address of C ptr[0]: %p\n", (void*)&C[0]);
+
     constexpr size_t L1_bytes = 64 * 1024;
     constexpr size_t L2_bytes = 4 * 1024 * 1024;
     constexpr int cache_line_floats = 32;
@@ -203,11 +214,28 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
         tile = cache_line_floats;
     }
 
+    // Process small tile of A and corresponding tile of B:
+    //     - Load A_tile into cache once
+    //     - Load B_tile into cache once
+    //     - Compute small block of C_tile
+
+
+    //todo:
+    //First transpose matrix B
+    //Then iterate by 4 elements (loop unrolling)
+    //Every 4 elements of A, store in one SIMD float - should already be aligned (might need to check)
+    // Then loop through elements of B, store in SIMD float and SIMD multiply with A, SIMD add, and SIMD store into C
+
     for (int ic = 0; ic < n; ic += tile){
         for (int jc = 0; jc < m; jc += tile){
             for (int lc = 0; lc < k; lc += tile){
                 for (int i = ic; i < min(ic+tile, n); ++i){
                     for (int j = jc; j < min(jc+tile, m); ++j) {
+
+
+                        
+                        
+
                         float first = A[n*m*z + i*m + j];
                         for (int l = lc; l < min(lc+tile, k); ++l){
                             C[n*k*z + i*k + l] += first * B[m*k*z + j*k + l];
@@ -235,6 +263,13 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
 
     //Use loop order to optimize L Cache loading.
     //Use sysctl -a | grep cache to check Apple Silicon Cache Size
+
+    printf("Address of A ptr: %p\n", (void*)A);
+    printf("Address of A ptr[0]: %p\n", (void*)&A[0]);
+    printf("Address of B ptr: %p\n", (void*)B);
+    printf("Address of B ptr[0]: %p\n", (void*)&B[0]);
+    printf("Address of C ptr: %p\n", (void*)C);
+    printf("Address of C ptr[0]: %p\n", (void*)&C[0]);
 
     constexpr size_t L1_bytes = 64 * 1024;
     constexpr size_t L2_bytes = 4 * 1024 * 1024;
@@ -272,6 +307,10 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
             }
         }
     }
+}
+
+void Matrix::simd_transpose() {
+
 }
 
 Matrix Matrix::matmul(Matrix other) {
@@ -598,6 +637,7 @@ int* Matrix::get_dims_clone() {
 }
 
 void Matrix::set_dim_len(int dim_len_n) {
+    //UNCHECKED, INTERNAL BMM USE ONLY
     dim_len = dim_len_n;
 }
 

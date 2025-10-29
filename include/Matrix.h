@@ -19,6 +19,12 @@ private:
     void matmul_cuda(float* A, float* B, float* C, int n, int m, int k);
     void matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int k, int z);
     void matmul_cpu(float* A, float* B, float* C, int n, int m, int k);
+    void simd_transpose(); //INTERNAL USE ONLY
+    int* get_dims_clone();
+    int* get_dists_clone();
+    void set_dim_len(int dim_len_n); // UNCHECKED
+    void set_dims(int* dims_n); // UNCHECKED
+    void set_dists(int* dists_n); // UNCHECKED
     
 public:
     
@@ -40,11 +46,6 @@ public:
     int* get_full_dims();
     int get_dims_index(int i);
     int get_dim_len();
-    int* get_dims_clone();
-    int* get_dists_clone();
-    void set_dim_len(int dim_len_n); // UNCHECKED
-    void set_dims(int* dims_n); // UNCHECKED
-    void set_dists(int* dists_n); // UNCHECKED
     float* get_data();
     void print_dims();
     static void set_CUDA(bool c);
