@@ -39,7 +39,8 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n) : dim_len(dim_len) {
     dists[0] = pos;
     data_len = pos*dims[0];
 
-    data = (float*) malloc(data_len * sizeof(float));
+    data = (float*) aligned_alloc(16, data_len * sizeof(float));
+
     if (data == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
@@ -74,7 +75,8 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
     dists[0] = pos;
     data_len = pos*dims[0];
 
-    data = (float*) malloc(data_len * sizeof(float));
+    data = (float*) aligned_alloc(16, data_len * sizeof(float));
+
     if (data == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
@@ -309,8 +311,50 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
     }
 }
 
-void Matrix::simd_transpose() {
+void Matrix::simd_transpose(float* A, float* B, int n, int m) {
 
+    int tile = 16;
+    
+    for (int ic = 0; ic + tile <= n; ic += tile) {
+        for (int jc = 0; jc + tile <= m; jc += tile) {
+            for (int i = ic; i < ic+tile; i += 4) {
+                for (int j = jc; j < ic+tile; j += 4) {
+                    //Load 16 elements from A to tranpose into B
+                    float32x4_t a = vld1q_f32(&A[(i+0)*m + j]);
+                    float32x4_t b = vld1q_f32(&A[(i+1)*m + j]);
+                    float32x4_t c = vld1q_f32(&A[(i+2)*m + j]);
+                    float32x4_t d = vld1q_f32(&A[(i+3)*m + j]);
+
+                    //Transpose halves
+                    float32x4x2_t p0 = vtrnq_f32(a, b);
+                    float32x4x2_t p1 = vtrnq_f32(c, d);
+
+                    //Combine halves
+                    float32x4_t r0 = vzipq_f32(p0.val[0], p1.val[0]).val[0];
+                    float32x4_t r1 = vzipq_f32(p0.val[1], p1.val[1]).val[0];
+                    float32x4_t r2 = vzipq_f32(p0.val[0], p1.val[0]).val[1];
+                    float32x4_t r3 = vzipq_f32(p0.val[1], p1.val[1]).val[1];
+
+                    //Store into B
+                    vst1q_f32(&B[(i+0)*m + j], r0);
+                    vst1q_f32(&B[(i+1)*m + j], r1);
+                    vst1q_f32(&B[(i+2)*m + j], r2);
+                    vst1q_f32(&B[(i+3)*m + j], r3);
+                }
+            }
+        }
+    }
+
+    for (int i = n-(n%tile); i < n; ++i) {
+        for (int j = 0; j < m; ++j) {
+            B[j*n + i] = A[i*m + j];
+        }
+    }
+    for (int i = 0; i < n-(n%tile); ++i) {
+        for (int j = m-(m%tile); j < m; ++j) {
+            B[j*n + i] = A[i*m + j];
+        }
+    }
 }
 
 Matrix Matrix::matmul(Matrix other) {
