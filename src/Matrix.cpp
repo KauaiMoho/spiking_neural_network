@@ -39,7 +39,14 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n) : dim_len(dim_len) {
     dists[0] = pos;
     data_len = pos*dims[0];
 
-    data = (float*) aligned_alloc(16, data_len * sizeof(float));
+
+    size_t size = data_len * sizeof(float);
+    size_t remainder = size % 16;
+    if (remainder != 0) {
+        size += 16 - remainder;
+    }
+
+    data = (float*) aligned_alloc(16, size);
 
     if (data == nullptr) {
         throw invalid_argument("Memory allocation error");
@@ -75,7 +82,13 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
     dists[0] = pos;
     data_len = pos*dims[0];
 
-    data = (float*) aligned_alloc(16, data_len * sizeof(float));
+    size_t size = data_len * sizeof(float);
+    size_t remainder = size % 16;
+    if (remainder != 0) {
+        size += 16 - remainder;
+    }
+
+    data = (float*) aligned_alloc(16, size);
 
     if (data == nullptr) {
         throw invalid_argument("Memory allocation error");
@@ -84,6 +97,10 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
     for (int i = 0; i < data_len; ++i) {
         data[i] = val;
     }
+}
+
+static Matrix invalid() {
+    return Matrix(0, 0, nullptr);
 }
 
 int Matrix::convert_idx(initializer_list<int> pos) {
@@ -187,13 +204,6 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
     //Use loop order to optimize L Cache loading.
     //Use sysctl -a | grep cache to check Apple Silicon Cache Size
 
-    printf("Address of A ptr: %p\n", (void*)A);
-    printf("Address of A ptr[0]: %p\n", (void*)&A[0]);
-    printf("Address of B ptr: %p\n", (void*)B);
-    printf("Address of B ptr[0]: %p\n", (void*)&B[0]);
-    printf("Address of C ptr: %p\n", (void*)C);
-    printf("Address of C ptr[0]: %p\n", (void*)&C[0]);
-
     constexpr size_t L1_bytes = 64 * 1024;
     constexpr size_t L2_bytes = 4 * 1024 * 1024;
     constexpr int cache_line_floats = 32;
@@ -224,30 +234,51 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
 
     //todo:
     //First transpose matrix B
-    //Then iterate by 4 elements (loop unrolling)
-    //Every 4 elements of A, store in one SIMD float - should already be aligned (might need to check)
-    // Then loop through elements of B, store in SIMD float and SIMD multiply with A, SIMD add, and SIMD store into C
 
+    size_t size = m * k * sizeof(float);
+    size_t remainder = size % 16;
+    if (remainder != 0) {
+        size += 16 - remainder;
+    }
+
+    float* B_t = (float*) aligned_alloc(16, size);
+
+    if (B_t == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+
+    simd_transpose(B, B_t, m, k);
     for (int ic = 0; ic < n; ic += tile){
-        for (int jc = 0; jc < m; jc += tile){
-            for (int lc = 0; lc < k; lc += tile){
-                for (int i = ic; i < min(ic+tile, n); ++i){
-                    for (int j = jc; j < min(jc+tile, m); ++j) {
-
-
-                        
-                        
-
-                        float first = A[n*m*z + i*m + j];
-                        for (int l = lc; l < min(lc+tile, k); ++l){
-                            C[n*k*z + i*k + l] += first * B[m*k*z + j*k + l];
+        for (int lc = 0; lc < k; lc += tile){
+            for (int i = ic; i < min(ic+tile, n); ++i){
+                for (int l = lc; l < min(lc+tile, k); ++l){
+                    float sum = 0;
+                    for (int jc = 0; jc < m; jc += tile){
+                        for (int j = jc; j < min(jc+tile, m); ++j) {
+                            sum += A[n*m*z + i*m + j] * B_t[m*k*z + l*m + j];
                         }
                     }
-                }
+                    C[n*k*z + i*k + l] = sum;
+                }   
             }
         }
     }
+    free(B_t);
 }
+    
+
+// loop through each row i
+// loop through each row (of b) k
+// loop through m, multiply each set of m with other set of m
+
+// 8 5 6 7 2 9
+
+// 7 7 6 8 9 9
+
+// 8 5 6 x 7 7 6 i[0] * k[0]
+// 8 5 6 x 8 9 9 i[0] * k[1]
+// 7 2 9 x 7 7 6 i[1] * k[0]
+// 7 2 9 x 8 9 9 i[1] * k[1]
 
 void Matrix::matmul_cuda(float* A, float* B, float* C, int n, int m, int k) {
     //TODO: Uncomment after compiling with nvcc
@@ -266,13 +297,6 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
     //Use loop order to optimize L Cache loading.
     //Use sysctl -a | grep cache to check Apple Silicon Cache Size
 
-    printf("Address of A ptr: %p\n", (void*)A);
-    printf("Address of A ptr[0]: %p\n", (void*)&A[0]);
-    printf("Address of B ptr: %p\n", (void*)B);
-    printf("Address of B ptr[0]: %p\n", (void*)&B[0]);
-    printf("Address of C ptr: %p\n", (void*)C);
-    printf("Address of C ptr[0]: %p\n", (void*)&C[0]);
-
     constexpr size_t L1_bytes = 64 * 1024;
     constexpr size_t L2_bytes = 4 * 1024 * 1024;
     constexpr int cache_line_floats = 32;
@@ -288,27 +312,42 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
 
     size_t usable_cache_floats = usable_cache_bytes / sizeof(float);
 
-    //Assumption of near square matrices
+    //Assumption of near square matrices, make sure tile is multiple of cache_line_floats
     int tile = static_cast<int>(sqrt(usable_cache_floats / 3));
     tile = tile & ~(cache_line_floats - 1);
     if (tile == 0) {
         tile = cache_line_floats;
     }
 
+    size_t size = m * k * sizeof(float);
+    size_t remainder = size % 16;
+    if (remainder != 0) {
+        size += 16 - remainder;
+    }
+
+    float* B_t = (float*) aligned_alloc(16, size);
+    
+    if (B_t == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+    
+    simd_transpose(B, B_t, m, k);
     for (int ic = 0; ic < n; ic += tile){
-        for (int jc = 0; jc < m; jc += tile){
-            for (int lc = 0; lc < k; lc += tile){
-                for (int i = ic; i < min(ic+tile, n); ++i){
-                    for (int j = jc; j < min(jc+tile, m); ++j) {
-                        float first = A[i*m + j];
-                        for (int l = lc; l < min(lc+tile, k); ++l){
-                            C[i*k + l] += first * B[j*k + l];
+        for (int lc = 0; lc < k; lc += tile){
+            for (int i = ic; i < min(ic+tile, n); ++i){
+                for (int l = lc; l < min(lc+tile, k); ++l){
+                    float sum = 0;
+                    for (int jc = 0; jc < m; jc += tile){
+                        for (int j = jc; j < min(jc+tile, m); ++j) {
+                            sum += A[i*m + j] * B_t[l*m + j];
                         }
                     }
-                }
+                    C[i*k + l] = sum;
+                }   
             }
         }
     }
+    free(B_t);
 }
 
 void Matrix::simd_transpose(float* A, float* B, int n, int m) {
@@ -318,7 +357,7 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m) {
     for (int ic = 0; ic + tile <= n; ic += tile) {
         for (int jc = 0; jc + tile <= m; jc += tile) {
             for (int i = ic; i < ic+tile; i += 4) {
-                for (int j = jc; j < ic+tile; j += 4) {
+                for (int j = jc; j < jc+tile; j += 4) {
                     //Load 16 elements from A to tranpose into B
                     float32x4_t a = vld1q_f32(&A[(i+0)*m + j]);
                     float32x4_t b = vld1q_f32(&A[(i+1)*m + j]);
@@ -330,16 +369,16 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m) {
                     float32x4x2_t p1 = vtrnq_f32(c, d);
 
                     //Combine halves
-                    float32x4_t r0 = vzipq_f32(p0.val[0], p1.val[0]).val[0];
-                    float32x4_t r1 = vzipq_f32(p0.val[1], p1.val[1]).val[0];
-                    float32x4_t r2 = vzipq_f32(p0.val[0], p1.val[0]).val[1];
-                    float32x4_t r3 = vzipq_f32(p0.val[1], p1.val[1]).val[1];
+                    float32x4_t r0 = vcombine_f32(vget_low_f32(p0.val[0]), vget_low_f32(p1.val[0]));
+                    float32x4_t r1 = vcombine_f32(vget_low_f32(p0.val[1]), vget_low_f32(p1.val[1]));
+                    float32x4_t r2 = vcombine_f32(vget_high_f32(p0.val[0]), vget_high_f32(p1.val[0]));
+                    float32x4_t r3 = vcombine_f32(vget_high_f32(p0.val[1]), vget_high_f32(p1.val[1]));
 
                     //Store into B
-                    vst1q_f32(&B[(i+0)*m + j], r0);
-                    vst1q_f32(&B[(i+1)*m + j], r1);
-                    vst1q_f32(&B[(i+2)*m + j], r2);
-                    vst1q_f32(&B[(i+3)*m + j], r3);
+                    vst1q_f32(&B[(j+0)*n + i], r0);
+                    vst1q_f32(&B[(j+1)*n + i], r1);
+                    vst1q_f32(&B[(j+2)*n + i], r2);
+                    vst1q_f32(&B[(j+3)*n + i], r3);
                 }
             }
         }
@@ -549,12 +588,12 @@ Matrix Matrix::matmul(Matrix other) {
 
             for (int t = 0; t < n_threads; ++t) {
                 threads[t] = thread([&, t]() {
-                for (int i = t; i < bmm_shape[0]; i += n_threads) {
-                    matmul_cpu_batched(data, other.get_data(), data_out, dims[dim_len - 2],
-                                    dims[dim_len - 1], bmm_shape[2], i);
-                }
-            });
-}
+                    for (int i = t; i < bmm_shape[0]; i += n_threads) {
+                        matmul_cpu_batched(data, other.get_data(), data_out, dims[dim_len - 2],
+                                        dims[dim_len - 1], bmm_shape[2], i);
+                    }
+                });
+            }
             for (int i = 0; i < n_threads; ++i) {
                 threads[i].join();
             }
@@ -577,6 +616,7 @@ Matrix Matrix::matmul(Matrix other) {
             throw invalid_argument("Invalid batched matrix-matrix product dimensions!");
         }
     }
+    return invalid();
 }   
 
 Matrix Matrix::clone() {
