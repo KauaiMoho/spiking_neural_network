@@ -10,6 +10,6 @@ int main() {
     Matrix b = Matrix(dim2, 7, 12);
     Matrix c = m.matmul(b);
     c.print_dims();
-    cout << c.get({0, 0, 2});
+    cout << c.get({0, 1, 2});
     cout << '\n';
 }
