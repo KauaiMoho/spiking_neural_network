@@ -252,21 +252,19 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
         for (int lc = 0; lc < k; lc += tile){
             for (int i = ic; i < min(ic+tile, n); ++i){
                 for (int l = lc; l < min(lc+tile, k); ++l){
-                    float32x4_t acc = vdupq_n_f32(0.0f);
                     float sum = 0;
                     for (int jc = 0; jc < m; jc += tile){
-                        
-                        //TODO: FIX THIS
+                        float32x4_t acc = vdupq_n_f32(0.0f);
                         int minV =  min(jc+tile, m);
                         float* ptrA = &A[n*m*z + i*m];
                         float* ptrB = &B_t[m*k*z + l*m];
-
-                        for (int j = jc; j < minV; j += 4) {
-                            float32x4_t a = vld1q_f32(ptrA + j);
-                            float32x4_t b = vld1q_f32(ptrB + j);
-                            float32x4_t prod = vmulq_f32(a, b);
-                            acc = vaddq_f32(acc, prod);
-                            
+                        if (m > 3) {                        
+                            for (int j = jc; j < minV; j += 4) {
+                                float32x4_t a = vld1q_f32(ptrA + j);
+                                float32x4_t b = vld1q_f32(ptrB + j);
+                                acc = vaddq_f32(acc, vmulq_f32(a, b));
+                                
+                            }
                         }
                         sum += vaddvq_f32(acc);
                         for (int j = minV - (minV%4); j < minV; ++j) {
@@ -287,9 +285,9 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
 // loop through each row (of b) k
 // loop through m, multiply each set of m with other set of m
 
-// 8 5 6 7 2 9
+// 8 5 6 7 2 9 8 5 6 7 2 9
 
-// 7 7 6 8 9 9
+// 7 7 6 8 9 9 7 7 6 8 9 9
 
 // 8 5 6 x 7 7 6 i[0] * k[0]
 // 8 5 6 x 8 9 9 i[0] * k[1]
