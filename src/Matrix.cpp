@@ -352,9 +352,23 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
                 for (int l = lc; l < min(lc+tile, k); ++l){
                     float sum = 0;
                     for (int jc = 0; jc < m; jc += tile){
-                        for (int j = jc; j < min(jc+tile, m); ++j) {
+                        float32x4_t acc = vdupq_n_f32(0.0f);
+                        int minV =  min(jc+tile, m);
+                        float* ptrA = &A[i*m];
+                        float* ptrB = &B_t[l*m];
+                        if (m > 3) {                        
+                            for (int j = jc; j < minV; j += 4) {
+                                float32x4_t a = vld1q_f32(ptrA + j);
+                                float32x4_t b = vld1q_f32(ptrB + j);
+                                acc = vaddq_f32(acc, vmulq_f32(a, b));
+                                
+                            }
+                        }
+                        sum += vaddvq_f32(acc);
+                        for (int j = minV - (minV%4); j < minV; ++j) {
                             sum += A[i*m + j] * B_t[l*m + j];
                         }
+                        
                     }
                     C[i*k + l] = sum;
                 }   
