@@ -231,10 +231,6 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
     //     - Load B_tile into cache once
     //     - Compute small block of C_tile
 
-
-    //todo:
-    //First transpose matrix B
-
     size_t size = m * k * sizeof(float);
     size_t remainder = size % 16;
     if (remainder != 0) {
@@ -257,20 +253,16 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
                         float32x4_t acc = vdupq_n_f32(0.0f);
                         int minV =  min(jc+tile, m);
                         float* ptrA = &A[n*m*z + i*m];
-                        float* ptrB = &B_t[m*k*z + l*m];
-                        if (m > 3) {                        
-                            for (int j = jc; j < minV; j += 4) {
-                                float32x4_t a = vld1q_f32(ptrA + j);
-                                float32x4_t b = vld1q_f32(ptrB + j);
-                                acc = vaddq_f32(acc, vmulq_f32(a, b));
-                                
-                            }
+                        float* ptrB = &B_t[m*k*z + l*m];                   
+                        for (int j = jc; j + 3 < minV; j += 4) {
+                            float32x4_t a = vld1q_f32(ptrA + j);
+                            float32x4_t b = vld1q_f32(ptrB + j);
+                            acc = vaddq_f32(acc, vmulq_f32(a, b)); 
                         }
                         sum += vaddvq_f32(acc);
                         for (int j = minV - (minV%4); j < minV; ++j) {
                             sum += A[n*m*z + i*m + j] * B_t[m*k*z + l*m + j];
                         }
-                        
                     }
                     C[n*k*z + i*k + l] = sum;
                 }   
@@ -279,20 +271,6 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
     }
     free(B_t);
 }
-    
-
-// loop through each row i
-// loop through each row (of b) k
-// loop through m, multiply each set of m with other set of m
-
-// 8 5 6 7 2 9 8 5 6 7 2 9
-
-// 7 7 6 8 9 9 7 7 6 8 9 9
-
-// 8 5 6 x 7 7 6 i[0] * k[0]
-// 8 5 6 x 8 9 9 i[0] * k[1]
-// 7 2 9 x 7 7 6 i[1] * k[0]
-// 7 2 9 x 8 9 9 i[1] * k[1]
 
 void Matrix::matmul_cuda(float* A, float* B, float* C, int n, int m, int k) {
     //TODO: Uncomment after compiling with nvcc
@@ -351,24 +329,24 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
             for (int i = ic; i < min(ic+tile, n); ++i){
                 for (int l = lc; l < min(lc+tile, k); ++l){
                     float sum = 0;
+
+                    //TODO, can reorder loops so SIMD is used better - up till m no matter what rather then end of tile
+                    float* ptrA = &A[i*m];
+                    float* ptrB = &B_t[l*m];
                     for (int jc = 0; jc < m; jc += tile){
                         float32x4_t acc = vdupq_n_f32(0.0f);
-                        int minV =  min(jc+tile, m);
-                        float* ptrA = &A[i*m];
-                        float* ptrB = &B_t[l*m];
-                        if (m > 3) {                        
-                            for (int j = jc; j < minV; j += 4) {
-                                float32x4_t a = vld1q_f32(ptrA + j);
-                                float32x4_t b = vld1q_f32(ptrB + j);
-                                acc = vaddq_f32(acc, vmulq_f32(a, b));
-                                
-                            }
+                        int minV =  min(jc+tile, m);                   
+                        for (int j = jc; j + 3 < minV; j += 4) {
+                            float32x4_t a = vld1q_f32(ptrA);
+                            float32x4_t b = vld1q_f32(ptrB);
+                            ptrA += 4;
+                            ptrB += 4;
+                            acc = vaddq_f32(acc, vmulq_f32(a, b));
                         }
                         sum += vaddvq_f32(acc);
                         for (int j = minV - (minV%4); j < minV; ++j) {
                             sum += A[i*m + j] * B_t[l*m + j];
                         }
-                        
                     }
                     C[i*k + l] = sum;
                 }   
@@ -377,7 +355,6 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
     }
     free(B_t);
 }
-
 void Matrix::simd_transpose(float* A, float* B, int n, int m) {
 
     int tile = 16;
@@ -424,7 +401,7 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m) {
     }
 }
 
-Matrix Matrix::matmul(Matrix other) {
+Matrix Matrix::matmul(Matrix& other) {
     
     if (other.get_dim_len() == 1 && dim_len == 1) {
         //Dimension 1 x 1 = Dot product
@@ -657,24 +634,52 @@ void Matrix::scmul(float s) {
     }
 }
 
-void Matrix::add(Matrix a) {
+void Matrix::add(Matrix& a) {
     for (int i = 0; i < dim_len; ++i){
         if (dims[i] != a.get_dims_index(i)) {
             throw invalid_argument("Invalid matrix dimensions!");
         }
     }
-    for (int i = 0; i < data_len; ++i) {
+    
+    float* aPtr = &a.get_data()[0];
+    float* tPtr = &data[0];
+
+    for (int i = 0; i + 3 < data_len; i += 4) {
+
+        float32x4_t a = vld1q_f32(aPtr);
+        float32x4_t t = vld1q_f32(tPtr);
+        float32x4_t add = vaddq_f32(a, t);
+        vst1q_f32(tPtr, add);
+        aPtr += 4;
+        tPtr += 4;
+    }
+
+    for (int i = data_len - (data_len % 4); i < data_len; ++i) {
         data[i] = data[i] + a.get_index(i);
     }
 }
 
-void Matrix::subtract(Matrix a) {
+void Matrix::subtract(Matrix& a) {
     for (int i = 0; i < dim_len; ++i){
         if (dims[i] != a.get_dims_index(i)) {
             throw invalid_argument("Invalid matrix dimensions!");
         }
     }
-    for (int i = 0; i < data_len; ++i) {
+    
+    float* aPtr = &a.get_data()[0];
+    float* tPtr = &data[0];
+
+    for (int i = 0; i + 3 < data_len; i += 4) {
+
+        float32x4_t a = vld1q_f32(aPtr);
+        float32x4_t t = vld1q_f32(tPtr);
+        float32x4_t sub = vsubq_f32(t, a);
+        vst1q_f32(tPtr, sub);
+        aPtr += 4;
+        tPtr += 4;
+    }
+
+    for (int i = data_len - (data_len % 4); i < data_len; ++i) {
         data[i] = data[i] - a.get_index(i);
     }
 }

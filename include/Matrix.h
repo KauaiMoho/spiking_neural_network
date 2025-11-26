@@ -12,7 +12,7 @@ private:
     int* dims;
     int* dists;
     int dim_len;
-    float data_len;
+    int data_len;
     static bool cuda;
     
     int convert_idx(initializer_list<int> pos); 
@@ -30,11 +30,11 @@ public:
     
     Matrix(int* dims_n, int dim_len, float* data_n);
     Matrix(int* dims_n, int dim_len, int val);
-    Matrix matmul(Matrix other);
+    Matrix matmul(Matrix& other);
     Matrix clone();
     void scmul(float s);
-    void add(Matrix a);
-    void subtract(Matrix a);
+    void add(Matrix& a);
+    void subtract(Matrix& a);
     void transpose(int* axes);
     float get(initializer_list<int> pos);
     float get_index(int i);
@@ -43,7 +43,6 @@ public:
     void broadcast(int* dim, int dim_len);
     void reshape(int* dims_new, int dim_len_new);
     int* get_broadcasted_strides(int* dims_new, int dim_len_new);
-    int* get_full_dims();
     int get_dims_index(int i);
     int get_dim_len();
     float* get_data();
