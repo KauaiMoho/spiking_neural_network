@@ -103,7 +103,7 @@ static Matrix invalid() {
     return Matrix(0, 0, nullptr);
 }
 
-int Matrix::convert_idx(initializer_list<int> pos) {
+int Matrix::convert_idx(initializer_list<int> pos) const {
     int idx = 0;
     int i = 0;
     if (pos.size() != static_cast<size_t>(dim_len)) {
@@ -117,7 +117,7 @@ int Matrix::convert_idx(initializer_list<int> pos) {
     return idx;
 }
 
-int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) {
+int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) const {
     //Dim_len_new will always be >= dim_len
     int* dists_new = (int*) malloc(dim_len_new * sizeof(int));
     int diff = dim_len_new - dim_len;
@@ -246,24 +246,30 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
     simd_transpose(B, B_t, m, k);
     for (int ic = 0; ic < n; ic += tile){
         for (int lc = 0; lc < k; lc += tile){
-            for (int i = ic; i < min(ic+tile, n); ++i){
-                for (int l = lc; l < min(lc+tile, k); ++l){
+            int iE = min(ic+tile, n);
+            for (int i = ic; i < iE; ++i){
+                int lE = min(lc+tile, k);
+                for (int l = lc; l < lE; ++l){
                     float sum = 0;
-                    for (int jc = 0; jc < m; jc += tile){
-                        float32x4_t acc = vdupq_n_f32(0.0f);
-                        int minV =  min(jc+tile, m);
-                        float* ptrA = &A[n*m*z + i*m];
-                        float* ptrB = &B_t[m*k*z + l*m];                   
-                        for (int j = jc; j + 3 < minV; j += 4) {
-                            float32x4_t a = vld1q_f32(ptrA + j);
-                            float32x4_t b = vld1q_f32(ptrB + j);
-                            acc = vaddq_f32(acc, vmulq_f32(a, b)); 
+                    float32x4_t acc = vdupq_n_f32(0.0f);
+                    for (int jc = 0; jc < m; jc += tile) {
+                        int jE =  min(jc+tile, m);
+                        float* ptrA = &A[n*m*z + i*m + jc];
+                        float* ptrB = &B_t[n*m*z + l*m + jc];
+                        for (int j = jc; j + 3 < jE; j += 4) {
+                            float32x4_t a = vld1q_f32(ptrA);
+                            float32x4_t b = vld1q_f32(ptrB);
+                            ptrA += 4;
+                            ptrB += 4;
+                            acc = vaddq_f32(acc, vmulq_f32(a, b));
                         }
-                        sum += vaddvq_f32(acc);
-                        for (int j = minV - (minV%4); j < minV; ++j) {
-                            sum += A[n*m*z + i*m + j] * B_t[m*k*z + l*m + j];
+                        for (int j = jE - (jE%4); j < jE; ++j) {
+                            sum += (*ptrA) * (*ptrB);
+                            ptrA += 1;
+                            ptrB += 1;
                         }
                     }
+                    sum += vaddvq_f32(acc);
                     C[n*k*z + i*k + l] = sum;
                 }   
             }
@@ -326,28 +332,30 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
     simd_transpose(B, B_t, m, k);
     for (int ic = 0; ic < n; ic += tile){
         for (int lc = 0; lc < k; lc += tile){
-            for (int i = ic; i < min(ic+tile, n); ++i){
-                for (int l = lc; l < min(lc+tile, k); ++l){
+            int iE = min(ic+tile, n);
+            for (int i = ic; i < iE; ++i){
+                int lE = min(lc+tile, k);
+                for (int l = lc; l < lE; ++l){
                     float sum = 0;
-
-                    //TODO, can reorder loops so SIMD is used better - up till m no matter what rather then end of tile
-                    float* ptrA = &A[i*m];
-                    float* ptrB = &B_t[l*m];
-                    for (int jc = 0; jc < m; jc += tile){
-                        float32x4_t acc = vdupq_n_f32(0.0f);
-                        int minV =  min(jc+tile, m);                   
-                        for (int j = jc; j + 3 < minV; j += 4) {
+                    float32x4_t acc = vdupq_n_f32(0.0f);
+                    for (int jc = 0; jc < m; jc += tile) {
+                        int jE =  min(jc+tile, m);
+                        float* ptrA = &A[i*m + jc];
+                        float* ptrB = &B_t[l*m + jc];
+                        for (int j = jc; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
                             ptrA += 4;
                             ptrB += 4;
                             acc = vaddq_f32(acc, vmulq_f32(a, b));
                         }
-                        sum += vaddvq_f32(acc);
-                        for (int j = minV - (minV%4); j < minV; ++j) {
-                            sum += A[i*m + j] * B_t[l*m + j];
+                        for (int j = jE - (jE%4); j < jE; ++j) {
+                            sum += (*ptrA) * (*ptrB);
+                            ptrA += 1;
+                            ptrB += 1;
                         }
                     }
+                    sum += vaddvq_f32(acc);
                     C[i*k + l] = sum;
                 }   
             }
@@ -401,7 +409,7 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m) {
     }
 }
 
-Matrix Matrix::matmul(Matrix& other) {
+Matrix Matrix::matmul(Matrix other) {
     
     if (other.get_dim_len() == 1 && dim_len == 1) {
         //Dimension 1 x 1 = Dot product
@@ -629,7 +637,18 @@ Matrix Matrix::clone() {
 }
 
 void Matrix::scmul(float s) {
-    for (int i = 0; i < data_len; ++i) {
+
+    float32x4_t scalar = vdupq_n_f32(s);
+    float* tPtr = &data[0];
+
+    for (int i = 0; i + 3 < data_len; i += 4) {
+        float32x4_t t = vld1q_f32(tPtr);
+        float32x4_t res = vmulq_f32(t, scalar);
+        vst1q_f32(tPtr, res);
+        tPtr += 4;
+    }
+
+    for (int i = data_len - (data_len % 4); i < data_len; ++i) {
         data[i] = data[i] * s;
     }
 }
@@ -698,11 +717,11 @@ void Matrix::transpose(int* axes) {
     free(dists_c);
 }
 
-float Matrix::get(initializer_list<int> pos) {
+float Matrix::get(initializer_list<int> pos) const {
     return data[convert_idx(pos)];
 }
 
-float Matrix::get_index(int i) {
+float Matrix::get_index(int i) const {
     if (i < 0 || i > data_len-1){
         throw invalid_argument("Invalid index!");
     }
@@ -720,14 +739,14 @@ void Matrix::set_index(int i, float val) {
     data[i] = val;
 }
 
-int Matrix::get_dims_index(int i) {
+int Matrix::get_dims_index(int i) const {
     if (i < 0 || i > dim_len-1) {
         throw invalid_argument("Invalid index!");
     }
     return dims[i];
 }
 
-int Matrix::get_dim_len() {
+int Matrix::get_dim_len() const {
     return dim_len;
 }
 
@@ -768,11 +787,11 @@ void Matrix::set_dists(int* dists_n) {
     dists = dists_n;
 }
 
-float* Matrix::get_data() {
+float* Matrix::get_data() const {
     return data;
 }
 
-void Matrix::print_dims() {
+void Matrix::print_dims() const {
     for (int i = 0; i < dim_len; ++i) {
         cout << dims[i];
         cout << " ";
