@@ -13,47 +13,56 @@ using std::initializer_list;
 //Default do not use CUDA
 bool Matrix::cuda = false;
 
-Matrix::Matrix(int* dims_n, int dim_len, float* data_n) : dim_len(dim_len) {
+Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy = true) : dim_len(dim_len) {
     //Define the dists var here
     //Assuming data/dims will be freed outside of constructor.
     if (dim_len == 0) throw invalid_argument("Matrix dimensions cannot be empty!");
-    dists = (int*) malloc(dim_len * sizeof(int));
-
-    if (dists == nullptr) {
-        throw invalid_argument("Memory allocation error");
-    }
-
-    dims = (int*) malloc(dim_len * sizeof(int));
-
-    if (dims == nullptr) {
-        throw invalid_argument("Memory allocation error");
-    }
-
-    int pos = 1;
-    for (int i = dim_len - 1; i > 0 ; i--) {
-        dists[i] = pos;
-        dims[i] = dims_n[i];
-        pos *= dims[i];
-    }
-    dims[0] = dims_n[0];
-    dists[0] = pos;
-    data_len = pos*dims[0];
 
 
-    size_t size = data_len * sizeof(float);
-    size_t remainder = size % 16;
-    if (remainder != 0) {
-        size += 16 - remainder;
-    }
+    if (copy) {
+        
+    
+        dists = (int*) malloc(dim_len * sizeof(int));
 
-    data = (float*) aligned_alloc(16, size);
+        if (dists == nullptr) {
+            throw invalid_argument("Memory allocation error");
+        }
 
-    if (data == nullptr) {
-        throw invalid_argument("Memory allocation error");
-    }
+        dims = (int*) malloc(dim_len * sizeof(int));
 
-    for (int i = 0; i < data_len; ++i) {
-        data[i] = data_n[i];
+        if (dims == nullptr) {
+            throw invalid_argument("Memory allocation error");
+        }
+
+        int pos = 1;
+        for (int i = dim_len - 1; i > 0 ; i--) {
+            dists[i] = pos;
+            dims[i] = dims_n[i];
+            pos *= dims[i];
+        }
+        dims[0] = dims_n[0];
+        dists[0] = pos;
+        data_len = pos*dims[0];
+
+
+        size_t size = data_len * sizeof(float);
+        size_t remainder = size % 16;
+        if (remainder != 0) {
+            size += 16 - remainder;
+        }
+
+        data = (float*) aligned_alloc(16, size);
+
+        if (data == nullptr) {
+            throw invalid_argument("Memory allocation error");
+        }
+
+        for (int i = 0; i < data_len; ++i) {
+            data[i] = data_n[i];
+        }
+    } else {
+        dims = dims_n;
+        data = data_n;
     }
 }
 
@@ -99,8 +108,14 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
     }
 }
 
+Matrix::~Matrix() {
+    free(data);
+    free(dims);
+    free(dists);
+}
+
 static Matrix invalid() {
-    return Matrix(0, 0, nullptr);
+    return Matrix(nullptr, 0, nullptr, false);
 }
 
 int Matrix::convert_idx(initializer_list<int> pos) const {
@@ -448,9 +463,7 @@ Matrix Matrix::matmul(Matrix other) {
                 }
                 data_out[i] = sum;
             }
-            Matrix ret = Matrix(new_dims, 1, data_out);
-            free(new_dims);
-            free(data_out);
+            Matrix ret = Matrix(new_dims, 1, data_out, false);
             return ret;
         }
         throw invalid_argument("Invalid matrix-vector product dimensions!");
@@ -473,9 +486,7 @@ Matrix Matrix::matmul(Matrix other) {
                 }
                 data_out[i] = sum;
             }
-            Matrix ret = Matrix(new_dims, 1, data_out);
-            free(new_dims);
-            free(data_out);
+            Matrix ret = Matrix(new_dims, 1, data_out, false);
             return ret;
         }
         throw invalid_argument("Invalid vector-matrix product dimensions!");
@@ -499,9 +510,7 @@ Matrix Matrix::matmul(Matrix other) {
             } else {
                 matmul_cpu(data, other.get_data(), data_out, new_dims[0], dims[1], new_dims[1]);
             }
-            Matrix ret = Matrix(new_dims, 2, data_out);
-            free(new_dims);
-            free(data_out);
+            Matrix ret = Matrix(new_dims, 2, data_out, false);
             return ret;
         }
         throw invalid_argument("Invalid matrix-matrix product dimensions!");
@@ -613,9 +622,7 @@ Matrix Matrix::matmul(Matrix other) {
 
             delete[] threads;
 
-            Matrix ret = Matrix(bmm_shape, 3, data_out);
-            free(data_out);
-            free(bmm_shape);
+            Matrix ret = Matrix(bmm_shape, 3, data_out, false);
 
             dim_len = dim_len_this;
             dims = dims_clone_this;

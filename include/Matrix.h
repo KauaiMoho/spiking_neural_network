@@ -28,8 +28,9 @@ private:
     
 public:
     
-    Matrix(int* dims_n, int dim_len, float* data_n);
+    Matrix(int* dims_n, int dim_len, float* data_n, bool copy = true);
     Matrix(int* dims_n, int dim_len, int val);
+    ~Matrix();
     Matrix matmul(Matrix other);
     Matrix clone();
     void scmul(float s);
