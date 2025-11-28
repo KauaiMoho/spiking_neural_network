@@ -7,17 +7,13 @@ using std::initializer_list;
 #include <thread>
 #include <arm_neon.h>
 
-//TODO
-// CHANGE MAIN VECTOR OPERATIONS TO USE SIMD - Single Instruction, Multiple Data
-
 //Default do not use CUDA
 bool Matrix::cuda = false;
 
-Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy = true) : dim_len(dim_len) {
-    //Define the dists var here
-    //Assuming data/dims will be freed outside of constructor.
-    if (dim_len == 0) throw invalid_argument("Matrix dimensions cannot be empty!");
-
+Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim_len) {
+    if (dim_len == 0) {
+        throw invalid_argument("Matrix dimensions cannot be empty!");
+    }
 
     if (copy) {
         
@@ -258,7 +254,7 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
         throw invalid_argument("Memory allocation error");
     }
 
-    simd_transpose(B, B_t, m, k);
+    simd_transpose(B, B_t, m, k, z);
     for (int ic = 0; ic < n; ic += tile){
         for (int lc = 0; lc < k; lc += tile){
             int iE = min(ic+tile, n);
@@ -270,7 +266,7 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
                     for (int jc = 0; jc < m; jc += tile) {
                         int jE =  min(jc+tile, m);
                         float* ptrA = &A[n*m*z + i*m + jc];
-                        float* ptrB = &B_t[n*m*z + l*m + jc];
+                        float* ptrB = &B_t[l*m + jc];
                         for (int j = jc; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
@@ -378,19 +374,20 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
     }
     free(B_t);
 }
-void Matrix::simd_transpose(float* A, float* B, int n, int m) {
+void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
 
     int tile = 16;
+    int offset = n*m*z;
     
     for (int ic = 0; ic + tile <= n; ic += tile) {
         for (int jc = 0; jc + tile <= m; jc += tile) {
             for (int i = ic; i < ic+tile; i += 4) {
                 for (int j = jc; j < jc+tile; j += 4) {
                     //Load 16 elements from A to tranpose into B
-                    float32x4_t a = vld1q_f32(&A[(i+0)*m + j]);
-                    float32x4_t b = vld1q_f32(&A[(i+1)*m + j]);
-                    float32x4_t c = vld1q_f32(&A[(i+2)*m + j]);
-                    float32x4_t d = vld1q_f32(&A[(i+3)*m + j]);
+                    float32x4_t a = vld1q_f32(&A[(i+0)*m + j + offset]);
+                    float32x4_t b = vld1q_f32(&A[(i+1)*m + j + offset]);
+                    float32x4_t c = vld1q_f32(&A[(i+2)*m + j + offset]);
+                    float32x4_t d = vld1q_f32(&A[(i+3)*m + j + offset]);
 
                     //Transpose halves
                     float32x4x2_t p0 = vtrnq_f32(a, b);
@@ -414,12 +411,12 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m) {
 
     for (int i = n-(n%tile); i < n; ++i) {
         for (int j = 0; j < m; ++j) {
-            B[j*n + i] = A[i*m + j];
+            B[j*n + i] = A[i*m + j + offset];
         }
     }
     for (int i = 0; i < n-(n%tile); ++i) {
         for (int j = m-(m%tile); j < m; ++j) {
-            B[j*n + i] = A[i*m + j];
+            B[j*n + i] = A[i*m + j + offset];
         }
     }
 }

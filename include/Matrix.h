@@ -19,7 +19,7 @@ private:
     void matmul_cuda(float* A, float* B, float* C, int n, int m, int k);
     void matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int k, int z);
     void matmul_cpu(float* A, float* B, float* C, int n, int m, int k);
-    void simd_transpose(float* A, float* B, int n, int m); //INTERNAL USE ONLY
+    void simd_transpose(float* A, float* B, int n, int m, int z = 0); //INTERNAL USE ONLY
     int* get_dims_clone();
     int* get_dists_clone();
     void set_dim_len(int dim_len_n); // UNCHECKED
