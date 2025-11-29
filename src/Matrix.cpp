@@ -59,6 +59,20 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
     } else {
         dims = dims_n;
         data = data_n;
+
+        dists = (int*) malloc(dim_len * sizeof(int));
+
+        if (dists == nullptr) {
+            throw invalid_argument("Memory allocation error");
+        }
+
+        int pos = 1;
+        for (int i = dim_len - 1; i > 0 ; i--) {
+            dists[i] = pos;
+            pos *= dims[i];
+        }
+        dists[0] = pos;
+        data_len = pos*dims[0];
     }
 }
 
