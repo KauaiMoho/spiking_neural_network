@@ -14,6 +14,7 @@ private:
     int dim_len;
     int data_len;
     static bool cuda;
+    bool copy;
     
     int convert_idx(initializer_list<int> pos) const; 
     void matmul_cuda(float* A, float* B, float* C, int n, int m, int k);

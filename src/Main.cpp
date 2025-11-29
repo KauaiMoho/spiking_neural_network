@@ -4,14 +4,11 @@ using namespace std;
 
 int main() {
     Matrix::set_CUDA(false);
-    int dim1_[] =       {7, 9, 1, 9, 2};
-    int dim2_[] = {4, 5, 7, 1, 6, 2, 3};
-    Matrix m = Matrix(dim1_, 5, 10);
-    Matrix b = Matrix(dim2_, 7, 12);
-    Matrix c = m.matmul(b);
-    c.print_dims();
-    cout << c.get({0, 1, 2});
-    cout << '\n';
+    // int dim1_[] =       {7, 9, 1, 9, 2};
+    // int dim2_[] = {4, 5, 7, 1, 6, 2, 3};
+    // Matrix m = Matrix(dim1_, 5, 10);
+    // Matrix b = Matrix(dim2_, 7, 12);
+    // Matrix c = m.matmul(b);
 
     int dim1[] = {2, 1, 2};
     int dim2[] = {2, 2, 1};
@@ -24,12 +21,9 @@ int main() {
 
     Matrix M = Matrix(dim1, 3, dataM);
     Matrix N = Matrix(dim2, 3, dataN);
-    cout << "RAN";
+    
     Matrix P = M.matmul(N);
     P.print_dims(); 
-
-    delete[] dataM;
-    delete[] dataN;
 
     return 0;
 }

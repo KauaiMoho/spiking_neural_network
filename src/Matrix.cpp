@@ -10,14 +10,12 @@ using std::initializer_list;
 //Default do not use CUDA
 bool Matrix::cuda = false;
 
-Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim_len) {
+Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim_len), copy(copy) {
     if (dim_len == 0) {
         throw invalid_argument("Matrix dimensions cannot be empty!");
     }
 
     if (copy) {
-        
-    
         dists = (int*) malloc(dim_len * sizeof(int));
 
         if (dists == nullptr) {
@@ -119,8 +117,10 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
 }
 
 Matrix::~Matrix() {
-    free(data);
-    free(dims);
+    if (copy) {
+        free(data);
+        free(dims);
+    }
     free(dists);
 }
 
@@ -463,7 +463,15 @@ Matrix Matrix::matmul(Matrix other) {
                 throw invalid_argument("Memory allocation error");
             }
             new_dims[0] = dims[0];
-            float* data_out = (float*) malloc(new_dims[0] * sizeof(float));
+
+            size_t size = new_dims[0] * sizeof(float);
+            size_t remainder = size % 16;
+            if (remainder != 0) {
+                size += 16 - remainder;
+            }
+
+            float* data_out = (float*) aligned_alloc(16, size);
+
             if (data_out == nullptr) {
                 throw invalid_argument("Memory allocation error");
             }
@@ -486,7 +494,15 @@ Matrix Matrix::matmul(Matrix other) {
                 throw invalid_argument("Memory allocation error");
             }
             new_dims[0] = other.get_dims_index(0);
-            float* data_out = (float*) malloc(new_dims[0] * sizeof(float));
+
+            size_t size = new_dims[0] * sizeof(float);
+            size_t remainder = size % 16;
+            if (remainder != 0) {
+                size += 16 - remainder;
+            }
+
+            float* data_out = (float*) aligned_alloc(16, size);
+
             if (data_out == nullptr) {
                 throw invalid_argument("Memory allocation error");
             }
@@ -512,7 +528,15 @@ Matrix Matrix::matmul(Matrix other) {
             }
             new_dims[0] = dims[0];
             new_dims[1] = other.get_dims_index(1);
-            float* data_out = (float*) malloc(new_dims[0] * new_dims[1] * sizeof(float));
+
+            size_t size = new_dims[0] * new_dims[1] * sizeof(float);
+            size_t remainder = size % 16;
+            if (remainder != 0) {
+                size += 16 - remainder;
+            }
+
+            float* data_out = (float*) aligned_alloc(16, size);
+
             if (data_out == nullptr) {
                 throw invalid_argument("Memory allocation error");
             } 
@@ -537,7 +561,7 @@ Matrix Matrix::matmul(Matrix other) {
             }
             if (dim_len >= other_dim_len) {
                 int diff = broadcast_dim_len - other_dim_len;
-                for (int i = dim_len - 3; i >= 0 ; i--) {
+                for (int i = dim_len - 3; i >= 0 ; --i) {
                     int i_other = i - diff;
                     if (i_other < 0) { 
                         broadcast_dims[i] = dims[i];
@@ -555,7 +579,7 @@ Matrix Matrix::matmul(Matrix other) {
                 }
             } else {
                 int diff = broadcast_dim_len - dim_len;
-                for (int i = other_dim_len - 3; i >= 0 ; i--) {
+                for (int i = other_dim_len - 3; i >= 0 ; --i) {
                     int other_dim = other.get_dims_index(i);
                     int i_this = i - diff;
                     if (i_this < 0) { 
@@ -612,13 +636,20 @@ Matrix Matrix::matmul(Matrix other) {
             int n_threads = thread::hardware_concurrency();
 
             //Avoid malloc to call constructor
-            thread* threads = new thread[bmm_shape[0]];
+            thread* threads = new thread[n_threads];
 
-            float* data_out = (float*) malloc(bmm_shape[0] * dims[dim_len - 2] * bmm_shape[2] * sizeof(float));
+            size_t size = bmm_shape[0] * dims[dim_len - 2] * bmm_shape[2] * sizeof(float);
+            size_t remainder = size % 16;
+            if (remainder != 0) {
+                size += 16 - remainder;
+            }
+
+            float* data_out = (float*) aligned_alloc(16, size);
+
             if (data_out == nullptr) {
                 throw invalid_argument("Memory allocation error");
             } 
-
+            
             for (int t = 0; t < n_threads; ++t) {
                 threads[t] = thread([&, t]() {
                     for (int i = t; i < bmm_shape[0]; i += n_threads) {
@@ -631,9 +662,9 @@ Matrix Matrix::matmul(Matrix other) {
                 threads[i].join();
             }
 
-            delete[] threads;
-
             Matrix ret = Matrix(bmm_shape, 3, data_out, false);
+
+            delete[] threads;
 
             dim_len = dim_len_this;
             dims = dims_clone_this;
@@ -647,6 +678,7 @@ Matrix Matrix::matmul(Matrix other) {
             throw invalid_argument("Invalid batched matrix-matrix product dimensions!");
         }
     }
+    cout << "INVALID";
     return invalid();
 }   
 
