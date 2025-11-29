@@ -49,6 +49,7 @@ public:
     int get_dim_len() const;
     float* get_data() const;
     void print_dims() const;
+    void print_data(int m = 50) const;
     static void set_CUDA(bool c);
     static bool get_CUDA();
     

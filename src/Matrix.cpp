@@ -117,9 +117,12 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
 }
 
 Matrix::~Matrix() {
-    if (copy) {
+    //TODO: Bugged
+    if (data != nullptr) {
         free(data);
-        free(dims);
+    }
+    if (dims != nullptr) {
+        free (dims);
     }
     free(dists);
 }
@@ -839,6 +842,17 @@ void Matrix::set_dists(int* dists_n) {
 
 float* Matrix::get_data() const {
     return data;
+}
+
+void Matrix::print_data(int m) const {
+    int end = min(data_len, m);
+    for (int i = 0; i < end; ++i) {
+        cout << data[i];
+        if (i < end - 1) {
+             cout << ", ";
+        }
+    }
+    cout << "\n";
 }
 
 void Matrix::print_dims() const {

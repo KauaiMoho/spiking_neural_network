@@ -23,7 +23,8 @@ int main() {
     Matrix N = Matrix(dim2, 3, dataN);
     
     Matrix P = M.matmul(N);
-    P.print_dims(); 
+    P.print_dims();
+    P.print_data();
 
     return 0;
 }
