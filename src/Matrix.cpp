@@ -438,7 +438,7 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
     }
 }
 
-Matrix Matrix::matmul(Matrix other) {
+Matrix Matrix::matmul(Matrix &other) {
     
     if (other.get_dim_len() == 1 && dim_len == 1) {
         //Dimension 1 x 1 = Dot product
@@ -685,14 +685,14 @@ Matrix Matrix::matmul(Matrix other) {
     return invalid();
 }   
 
-Matrix Matrix::clone() {
+Matrix Matrix::clone() const {
     return Matrix(dims, dim_len, data);
 }
 
 void Matrix::scmul(float s) {
 
     float32x4_t scalar = vdupq_n_f32(s);
-    float* tPtr = &data[0];
+    float* tPtr = data;
 
     for (int i = 0; i + 3 < data_len; i += 4) {
         float32x4_t t = vld1q_f32(tPtr);
@@ -706,21 +706,21 @@ void Matrix::scmul(float s) {
     }
 }
 
-void Matrix::add(Matrix& a) {
+void Matrix::add(const Matrix& a) {
     for (int i = 0; i < dim_len; ++i){
         if (dims[i] != a.get_dims_index(i)) {
             throw invalid_argument("Invalid matrix dimensions!");
         }
     }
     
-    float* aPtr = &a.get_data()[0];
-    float* tPtr = &data[0];
+    const float* aPtr = a.get_data();
+    float* tPtr = data;
 
     for (int i = 0; i + 3 < data_len; i += 4) {
 
-        float32x4_t a = vld1q_f32(aPtr);
-        float32x4_t t = vld1q_f32(tPtr);
-        float32x4_t add = vaddq_f32(a, t);
+        float32x4_t af = vld1q_f32(aPtr);
+        float32x4_t tf = vld1q_f32(tPtr);
+        float32x4_t add = vaddq_f32(af, tf);
         vst1q_f32(tPtr, add);
         aPtr += 4;
         tPtr += 4;
@@ -731,21 +731,21 @@ void Matrix::add(Matrix& a) {
     }
 }
 
-void Matrix::subtract(Matrix& a) {
+void Matrix::subtract(const Matrix& a) {
     for (int i = 0; i < dim_len; ++i){
         if (dims[i] != a.get_dims_index(i)) {
             throw invalid_argument("Invalid matrix dimensions!");
         }
     }
     
-    float* aPtr = &a.get_data()[0];
-    float* tPtr = &data[0];
+    const float* aPtr = a.get_data();
+    float* tPtr = data;
 
     for (int i = 0; i + 3 < data_len; i += 4) {
 
-        float32x4_t a = vld1q_f32(aPtr);
-        float32x4_t t = vld1q_f32(tPtr);
-        float32x4_t sub = vsubq_f32(t, a);
+        float32x4_t af = vld1q_f32(aPtr);
+        float32x4_t tf = vld1q_f32(tPtr);
+        float32x4_t sub = vsubq_f32(tf, af);
         vst1q_f32(tPtr, sub);
         aPtr += 4;
         tPtr += 4;
@@ -770,7 +770,7 @@ void Matrix::transpose(int* axes) {
     free(dists_c);
 }
 
-float Matrix::get(initializer_list<int> pos) const {
+float Matrix::get(const initializer_list<int> &pos) const {
     return data[convert_idx(pos)];
 }
 
@@ -781,7 +781,7 @@ float Matrix::get_index(int i) const {
     return data[i];
 }
 
-void Matrix::set(initializer_list<int> pos, float val) {
+void Matrix::set(const initializer_list<int> &pos, float val) {
     data[convert_idx(pos)] = val;
 }
 
@@ -803,7 +803,7 @@ int Matrix::get_dim_len() const {
     return dim_len;
 }
 
-int* Matrix::get_dists_clone() {
+int* Matrix::get_dists_clone() const {
     int* dists_clone = (int*) malloc(dim_len * sizeof(int));
     if (dists_clone == nullptr) {
         throw invalid_argument("Memory allocation error");
@@ -814,7 +814,7 @@ int* Matrix::get_dists_clone() {
     return dists_clone;
 }
 
-int* Matrix::get_dims_clone() {
+int* Matrix::get_dims_clone() const {
     int* dims_clone = (int*) malloc(dim_len * sizeof(int));
     if (dims_clone == nullptr) {
         throw invalid_argument("Memory allocation error");

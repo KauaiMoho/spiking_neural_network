@@ -21,8 +21,8 @@ private:
     void matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int k, int z);
     void matmul_cpu(float* A, float* B, float* C, int n, int m, int k);
     void simd_transpose(float* A, float* B, int n, int m, int z = 0); //INTERNAL USE ONLY
-    int* get_dims_clone();
-    int* get_dists_clone();
+    int* get_dims_clone() const;
+    int* get_dists_clone() const;
     void set_dim_len(int dim_len_n); // UNCHECKED
     void set_dims(int* dims_n); // UNCHECKED
     void set_dists(int* dists_n); // UNCHECKED
@@ -32,15 +32,15 @@ public:
     Matrix(int* dims_n, int dim_len, float* data_n, bool copy = true);
     Matrix(int* dims_n, int dim_len, int val);
     ~Matrix();
-    Matrix matmul(Matrix other);
-    Matrix clone();
+    Matrix matmul(Matrix &other);
+    Matrix clone() const;
     void scmul(float s);
-    void add(Matrix& a);
-    void subtract(Matrix& a);
+    void add(const Matrix &a);
+    void subtract(const Matrix &a);
     void transpose(int* axes);
-    float get(initializer_list<int> pos) const;
+    float get(const initializer_list<int> &pos) const;
     float get_index(int i) const;
-    void set(initializer_list<int> pos, float val);
+    void set(const initializer_list<int> &pos, float val);
     void set_index(int i, float val);
     void broadcast(int* dim, int dim_len);
     void reshape(int* dims_new, int dim_len_new);
