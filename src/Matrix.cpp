@@ -132,6 +132,8 @@ static Matrix invalid() {
 }
 
 int Matrix::convert_idx(initializer_list<int> pos) const {
+
+    //Converts between regular indexing (nd) and stride position (1d)
     int idx = 0;
     int i = 0;
     if (pos.size() != static_cast<size_t>(dim_len)) {
@@ -147,6 +149,8 @@ int Matrix::convert_idx(initializer_list<int> pos) const {
 
 int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) const {
     //Dim_len_new will always be >= dim_len
+
+    //Gets the new strides (row major, flattened) for a given broadcast
     int* dists_new = (int*) malloc(dim_len_new * sizeof(int));
     int diff = dim_len_new - dim_len;
     if (dists_new == nullptr) {
@@ -174,6 +178,9 @@ int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) const {
 
 void Matrix::reshape(int* dims_new, int dim_len_new) {
     //Dims_new must multiply into same size as dims_old
+
+    //Will change between any dimensions as long as both dimensions have the same total size
+    //Data not modified, only stride and dimension array modified
     int dim_size_old = 1;
     for (int i = 0; i < dim_len; ++i) {
         dim_size_old *= dims[i];
@@ -209,6 +216,10 @@ void Matrix::reshape(int* dims_new, int dim_len_new) {
 
 void Matrix::broadcast(int* dims_new, int dim_len_new) {
     //Dim_len_new must always be >= dim_len
+
+    //Broadcast -> Given two sets of dimensions, will add extra dimensions to the shorter one such that the numbers are extended to match dimensions
+    //Useful for a BLAS library when multiplying matrices of unequal dimension
+    //Data not modified, only stride and dimension array modified
     if (dim_len_new >= dim_len) {
         int* dists_new = get_broadcasted_strides(dims_new, dim_len_new);
         free(dists);
@@ -396,6 +407,7 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
     int tile = 16;
     int offset = n*m*z;
     
+    //Tile for same reasons as matmul (minimize cache misses)
     for (int ic = 0; ic + tile <= n; ic += tile) {
         for (int jc = 0; jc + tile <= m; jc += tile) {
             for (int i = ic; i < ic+tile; i += 4) {
@@ -405,15 +417,34 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
                     float32x4_t b = vld1q_f32(&A[(i+1)*m + j + offset]);
                     float32x4_t c = vld1q_f32(&A[(i+2)*m + j + offset]);
                     float32x4_t d = vld1q_f32(&A[(i+3)*m + j + offset]);
+                    
+                    // a = [a0 a1 a2 a3]
+                    // b = [b0 b1 b2 b3]
+                    // c = [c0 c1 c2 c3]
+                    // d = [d0 d1 d2 d3]
 
                     //Transpose halves
                     float32x4x2_t p0 = vtrnq_f32(a, b);
+                    //[a0 a1 a2 a3]      [a0 b0 a2 b2]
+                    //[b0 b1 b2 b3]  →   [a1 b1 a3 b3]
                     float32x4x2_t p1 = vtrnq_f32(c, d);
+
+                    
 
                     //Combine halves
                     float32x4_t r0 = vcombine_f32(vget_low_f32(p0.val[0]), vget_low_f32(p1.val[0]));
+                    
+                    // low(p0[0]) = [a0 b0]
+                    // low(p1[0]) = [c0 d0]
+                    // → r0 = [a0 b0 c0 d0]
+
                     float32x4_t r1 = vcombine_f32(vget_low_f32(p0.val[1]), vget_low_f32(p1.val[1]));
                     float32x4_t r2 = vcombine_f32(vget_high_f32(p0.val[0]), vget_high_f32(p1.val[0]));
+
+                    // high(p0[0]) = [a2 b2]
+                    // high(p1[0]) = [c2 d2]
+                    // → r2 = [a2 b2 c2 d2]
+
                     float32x4_t r3 = vcombine_f32(vget_high_f32(p0.val[1]), vget_high_f32(p1.val[1]));
 
                     //Store into B
@@ -426,16 +457,28 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
         }
     }
 
+
+    //Scalar Clean up what was missed by tiling
+
+    //Handles leftover rows top right rectangle and bottom right corner
     for (int i = n-(n%tile); i < n; ++i) {
         for (int j = 0; j < m; ++j) {
             B[j*n + i] = A[i*m + j + offset];
         }
     }
+
+    // Corner:
+    // i >= n-(n%tile)
+    // j >= m-(m%tile)
+
+    //Handle leftover colouns (ignoring final few rows overlapping with above loop)
+    //Basically the bottom left rectangle 
     for (int i = 0; i < n-(n%tile); ++i) {
         for (int j = m-(m%tile); j < m; ++j) {
             B[j*n + i] = A[i*m + j + offset];
         }
     }
+
 }
 
 Matrix Matrix::matmul(Matrix &other) {
@@ -653,6 +696,7 @@ Matrix Matrix::matmul(Matrix &other) {
                 throw invalid_argument("Memory allocation error");
             } 
             
+            //each thread handles an set of indivisual slices (divided evenly between all possible threads)
             for (int t = 0; t < n_threads; ++t) {
                 threads[t] = thread([&, t]() {
                     for (int i = t; i < bmm_shape[0]; i += n_threads) {
@@ -863,6 +907,8 @@ void Matrix::print_dims() const {
     cout << "\n";
 }
 
+
+//Get/Set CUDA Usage
 void Matrix::set_CUDA(bool c) {
     cuda = c;
 }
