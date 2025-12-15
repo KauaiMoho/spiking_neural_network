@@ -3,6 +3,7 @@
 #include <initializer_list>
 #include "Matrix.h"
 using std::initializer_list;
+using namespace std;
 
 class ANN {
 
@@ -14,7 +15,8 @@ private:
     
 public:
     
-    
+    float relu(float x);
+    float sigmoid(float x);
     
 };
 

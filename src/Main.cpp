@@ -4,11 +4,12 @@ using namespace std;
 
 int main() {
     Matrix::set_CUDA(false);
-    // int dim1_[] =       {7, 9, 1, 9, 2};
-    // int dim2_[] = {4, 5, 7, 1, 6, 2, 3};
-    // Matrix m = Matrix(dim1_, 5, 10);
-    // Matrix b = Matrix(dim2_, 7, 12);
-    // Matrix c = m.matmul(b);
+    int dim1_[] =       {7, 9, 1, 9, 2};
+    int dim2_[] = {4, 5, 7, 1, 6, 2, 3};
+    Matrix m = Matrix(dim1_, 5, (float)10);
+    Matrix b = Matrix(dim2_, 7, (float)12);
+    Matrix c = m.matmul(b);
+    c.print_data(10);
 
     int dim1[] = {2, 1, 2};
     int dim2[] = {2, 2, 1};

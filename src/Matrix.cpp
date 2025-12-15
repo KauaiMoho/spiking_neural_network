@@ -1,33 +1,31 @@
 #include "Matrix.h"
-using namespace std;
 using std::initializer_list;
 #include <stdexcept>
-#include <cstdlib>
 #include <iostream>
 #include <thread>
 #include <arm_neon.h>
 #include <random>
-#include <optional>
+#include <algorithm>
 
 //Default do not use CUDA
 bool Matrix::cuda = false;
 
 Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim_len), copy(copy) {
     if (dim_len == 0) {
-        throw invalid_argument("Matrix dimensions cannot be empty!");
+        throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
 
     if (copy) {
         dists = (int*) malloc(dim_len * sizeof(int));
 
         if (dists == nullptr) {
-            throw invalid_argument("Memory allocation error");
+            throw std::invalid_argument("Memory allocation error");
         }
 
         dims = (int*) malloc(dim_len * sizeof(int));
 
         if (dims == nullptr) {
-            throw invalid_argument("Memory allocation error");
+            throw std::invalid_argument("Memory allocation error");
         }
 
         int pos = 1;
@@ -50,7 +48,7 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
         data = (float*) aligned_alloc(16, aligned_data_len);
 
         if (data == nullptr) {
-            throw invalid_argument("Memory allocation error");
+            throw std::invalid_argument("Memory allocation error");
         }
 
         for (size_t i = 0; i < data_len; ++i) {
@@ -65,7 +63,7 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
         dists = (int*) malloc(dim_len * sizeof(int));
 
         if (dists == nullptr) {
-            throw invalid_argument("Memory allocation error");
+            throw std::invalid_argument("Memory allocation error");
         }
 
         int pos = 1;
@@ -80,17 +78,17 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
 
 Matrix::Matrix(int* dims_n, int dim_len, float val) : dim_len(dim_len) {
 
-    if (dim_len == 0) throw invalid_argument("Matrix dimensions cannot be empty!");
+    if (dim_len == 0) throw std::invalid_argument("Matrix dimensions cannot be empty!");
     dists = (int*) malloc(dim_len * sizeof(int));
 
     if (dists == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
 
     dims = (int*) malloc(dim_len * sizeof(int));
 
     if (dims == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
 
     int pos = 1;
@@ -112,7 +110,7 @@ Matrix::Matrix(int* dims_n, int dim_len, float val) : dim_len(dim_len) {
     data = (float*) aligned_alloc(16, aligned_data_len);
 
     if (data == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
 
     for (size_t i = 0; i < data_len; ++i) {
@@ -130,17 +128,17 @@ Matrix::Matrix(int* dims_n, int dim_len, unsigned int random_seed) : dim_len(dim
     std::mt19937 gen(random_seed);
     float val = dist(gen);
 
-    if (dim_len == 0) throw invalid_argument("Matrix dimensions cannot be empty!");
+    if (dim_len == 0) throw std::invalid_argument("Matrix dimensions cannot be empty!");
     dists = (int*) malloc(dim_len * sizeof(int));
 
     if (dists == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
 
     dims = (int*) malloc(dim_len * sizeof(int));
 
     if (dims == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
 
     int pos = 1;
@@ -162,7 +160,7 @@ Matrix::Matrix(int* dims_n, int dim_len, unsigned int random_seed) : dim_len(dim
     data = (float*) aligned_alloc(16, aligned_data_len);
 
     if (data == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
 
     for (size_t i = 0; i < data_len; ++i) {
@@ -190,13 +188,13 @@ int Matrix::convert_idx(initializer_list<int> pos) const {
     int idx = 0;
     int i = 0;
     if (pos.size() != static_cast<size_t>(dim_len)) {
-        throw invalid_argument("Wrong number of indices!");
+        throw std::invalid_argument("Wrong number of indices!");
     }
     for (int value : pos) {
         idx += value*dists[i];
         ++i;
     }
-    if (idx > data_len - 1 || idx < 0) throw invalid_argument("Invalid position dimensions!");
+    if (idx > data_len - 1 || idx < 0) throw std::invalid_argument("Invalid position dimensions!");
     return idx;
 }
 
@@ -207,7 +205,7 @@ int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) const {
     int* dists_new = (int*) malloc(dim_len_new * sizeof(int));
     int diff = dim_len_new - dim_len;
     if (dists_new == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
 
     for (int i = dim_len_new - 1; i >= 0 ; i--) {
@@ -221,7 +219,7 @@ int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) const {
                 dists_new[i] = 0;
             } else {
                 free(dists_new);
-                throw invalid_argument("Incompatible dimensions for broadcasting!");
+                throw std::invalid_argument("Incompatible dimensions for broadcasting!");
             }
         }
     }
@@ -246,12 +244,12 @@ void Matrix::reshape(int* dims_new, int dim_len_new) {
         free(dists);
         dists = (int*) malloc(dim_len_new * sizeof(int));
         if (dists == nullptr) {
-            throw invalid_argument("Memory allocation error");
+            throw std::invalid_argument("Memory allocation error");
         }
         free(dims);
         dims = (int*) malloc(dim_len_new * sizeof(int));
         if (dims == nullptr) {
-            throw invalid_argument("Memory allocation error");
+            throw std::invalid_argument("Memory allocation error");
         }
         int pos = 1;
         for (int i = dim_len_new - 1; i > 0 ; i--) {
@@ -263,7 +261,7 @@ void Matrix::reshape(int* dims_new, int dim_len_new) {
         dists[0] = pos;
         dim_len = dim_len_new;
     } else {    
-        throw invalid_argument("Invalid dimension size for reshape!");
+        throw std::invalid_argument("Invalid dimension size for reshape!");
     }
 }
 
@@ -280,14 +278,14 @@ void Matrix::broadcast(int* dims_new, int dim_len_new) {
         dists = dists_new;
         dims = (int*) malloc(dim_len_new * sizeof(int));
         if (dims == nullptr) {
-            throw invalid_argument("Memory allocation error");
+            throw std::invalid_argument("Memory allocation error");
         }
         for (size_t i = 0; i < dim_len_new; ++i) {
             dims[i] = dims_new[i];
         }
         dim_len = dim_len_new;
     } else {
-        throw invalid_argument("Invalid dimension size for broadcasting!");
+        throw std::invalid_argument("Invalid dimension size for broadcasting!");
     }
 }
 
@@ -332,20 +330,20 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
     float* B_t = (float*) aligned_alloc(16, size);
 
     if (B_t == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
 
     simd_transpose(B, B_t, m, k, z);
     for (int ic = 0; ic < n; ic += tile){
         for (int lc = 0; lc < k; lc += tile){
-            int iE = min(ic+tile, n);
+            int iE = std::min(ic+tile, n);
             for (size_t i = ic; i < iE; ++i){
-                int lE = min(lc+tile, k);
+                int lE = std::min(lc+tile, k);
                 for (size_t l = lc; l < lE; ++l){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (int jc = 0; jc < m; jc += tile) {
-                        int jE =  min(jc+tile, m);
+                        int jE =  std::min(jc+tile, m);
                         float* ptrA = &A[n*m*z + i*m + jc];
                         float* ptrB = &B_t[l*m + jc];
                         for (size_t j = jc; j + 3 < jE; j += 4) {
@@ -418,20 +416,20 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
     float* B_t = (float*) aligned_alloc(16, size);
     
     if (B_t == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
     
     simd_transpose(B, B_t, m, k);
     for (int ic = 0; ic < n; ic += tile){
         for (int lc = 0; lc < k; lc += tile){
-            int iE = min(ic+tile, n);
+            int iE = std::min(ic+tile, n);
             for (size_t i = ic; i < iE; ++i){
-                int lE = min(lc+tile, k);
+                int lE = std::min(lc+tile, k);
                 for (size_t l = lc; l < lE; ++l){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (int jc = 0; jc < m; jc += tile) {
-                        int jE =  min(jc+tile, m);
+                        int jE =  std::min(jc+tile, m);
                         float* ptrA = &A[i*m + jc];
                         float* ptrB = &B_t[l*m + jc];
                         for (size_t j = jc; j + 3 < jE; j += 4) {
@@ -460,7 +458,7 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
     size_t tile = 16;
     size_t offset = n*m*z;
     
-    //Tile for same reasons as matmul (minimize cache misses)
+    //Tile for same reasons as matmul (std::minimize cache misses)
     for (size_t ic = 0; ic + tile <= n; ic += tile) {
         for (size_t jc = 0; jc + tile <= m; jc += tile) {
             for (size_t i = ic; i < ic+tile; i += 4) {
@@ -544,13 +542,13 @@ Matrix Matrix::matmul(Matrix &other) {
         if (other.get_dims_index(0) == dims[0]) {
             int* new_dims = (int*) malloc(sizeof(int));
             if (new_dims == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             }
             new_dims[0] = 1;
             float data_out = 0;
             float32x4_t acc = vdupq_n_f32(0.0f);
             for (int jc = 0; jc < data_len; jc += tile) {
-                int jE =  min(jc+tile, data_len);
+                int jE =  std::min(jc+tile, data_len);
                 const float* oPtr = other.get_data() + jc;
                 float* tPtr = data + jc;
                 for (size_t j = jc; j + 3 < jE; j += 4) {
@@ -571,7 +569,7 @@ Matrix Matrix::matmul(Matrix &other) {
             free(new_dims);
             return ret;
         }
-        throw invalid_argument("Invalid dot product dimensions!");
+        throw std::invalid_argument("Invalid dot product dimensions!");
     } else if (other.get_dim_len() == 1 && dim_len == 2) {
         // dimension 2 x 1 = Vector Product
 
@@ -579,7 +577,7 @@ Matrix Matrix::matmul(Matrix &other) {
         if (other.get_dims_index(0) == dims[1]) {
             int* new_dims = (int*) malloc(sizeof(int));
             if (new_dims == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             }
             new_dims[0] = dims[0];
 
@@ -592,16 +590,16 @@ Matrix Matrix::matmul(Matrix &other) {
             float* data_out = (float*) aligned_alloc(16, size);
 
             if (data_out == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             }
 
             for (int ic = 0; ic < new_dims[0]; ic += tile){
-                int iE = min(ic+tile, new_dims[0]);
+                int iE = std::min(ic+tile, new_dims[0]);
                 for (size_t i = ic; i < iE; ++i){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (int jc = 0; jc < dims[1]; jc += tile) {
-                        int jE =  min(jc+tile, dims[1]);
+                        int jE =  std::min(jc+tile, dims[1]);
                         float* ptrA = &data[i*dims[1] + jc];
                         float* ptrB = &(other.get_data()[jc]);
                         for (size_t j = jc; j + 3 < jE; j += 4) {
@@ -625,13 +623,13 @@ Matrix Matrix::matmul(Matrix &other) {
             Matrix ret = Matrix(new_dims, 1, data_out, false);
             return ret;
         }
-        throw invalid_argument("Invalid matrix-vector product dimensions!");
+        throw std::invalid_argument("Invalid matrix-vector product dimensions!");
     } else if (other.get_dim_len() == 2 && dim_len == 1) {
         // dimension 1 x 2 = Vector Product
         if (other.get_dims_index(1) == dims[0]) {
             int* new_dims = (int*) malloc(sizeof(int));
             if (new_dims == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             }
             new_dims[0] = other.get_dims_index(0);
 
@@ -646,16 +644,16 @@ Matrix Matrix::matmul(Matrix &other) {
             float* data_out = (float*) aligned_alloc(16, size);
 
             if (data_out == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             }
 
             for (int ic = 0; ic < new_dims[0]; ic += tile){
-                int iE = min(ic+tile, new_dims[0]);
+                int iE = std::min(ic+tile, new_dims[0]);
                 for (size_t i = ic; i < iE; ++i){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (int jc = 0; jc < other_dim; jc += tile) {
-                        int jE =  min(jc+tile, other_dim);
+                        int jE =  std::min(jc+tile, other_dim);
                         float* ptrA = &(other.get_data()[i*other_dim + jc]);
                         float* ptrB = &data[jc];
                         for (size_t j = jc; j + 3 < jE; j += 4) {
@@ -687,7 +685,7 @@ Matrix Matrix::matmul(Matrix &other) {
             Matrix ret = Matrix(new_dims, 1, data_out, false);
             return ret;
         }
-        throw invalid_argument("Invalid vector-matrix product dimensions!");
+        throw std::invalid_argument("Invalid vector-matrix product dimensions!");
     } else if (other.get_dim_len() == 2 && dim_len == 2) {
         // Dimension 2 x 2 = Matrix multiplication
         // Will perform This X Other
@@ -695,7 +693,7 @@ Matrix Matrix::matmul(Matrix &other) {
 
             int* new_dims = (int*) malloc(2 * sizeof(int));
             if (new_dims == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             }
             new_dims[0] = dims[0];
             new_dims[1] = other.get_dims_index(1);
@@ -709,7 +707,7 @@ Matrix Matrix::matmul(Matrix &other) {
             float* data_out = (float*) aligned_alloc(16, size);
 
             if (data_out == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             } 
             if (cuda) {
                 matmul_cuda(data, other.get_data(), data_out, new_dims[0], dims[1], new_dims[1]);
@@ -719,16 +717,16 @@ Matrix Matrix::matmul(Matrix &other) {
             Matrix ret = Matrix(new_dims, 2, data_out, false);
             return ret;
         }
-        throw invalid_argument("Invalid matrix-matrix product dimensions!");
+        throw std::invalid_argument("Invalid matrix-matrix product dimensions!");
     } else if (other.get_dim_len() >= 2 && dim_len >= 2) {
         // Dimension n x n = Batched matrix multiplaction with broadcasting
         //Will perform This X Other, batched
         int other_dim_len = other.get_dim_len();
         if (dims[dim_len-1] == other.get_dims_index(other_dim_len - 2)) {
-            int broadcast_dim_len = max(dim_len, other_dim_len);
+            int broadcast_dim_len = std::max(dim_len, other_dim_len);
             int* broadcast_dims = (int*) malloc(broadcast_dim_len * sizeof(int));
             if (broadcast_dims == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             }
             if (dim_len >= other_dim_len) {
                 int diff = broadcast_dim_len - other_dim_len;
@@ -744,7 +742,7 @@ Matrix Matrix::matmul(Matrix &other) {
                             broadcast_dims[i] = other_dim;
                         } else {
                             free(broadcast_dims);
-                            throw invalid_argument("Incompatible dimensions for matmul batch broadcasting!");
+                            throw std::invalid_argument("Incompatible dimensions for matmul batch broadcasting!");
                         }
                     }
                 }
@@ -762,14 +760,14 @@ Matrix Matrix::matmul(Matrix &other) {
                             broadcast_dims[i] = other_dim;
                         } else {
                             free(broadcast_dims);
-                            throw invalid_argument("Incompatible dimensions for matmul batch broadcasting!");
+                            throw std::invalid_argument("Incompatible dimensions for matmul batch broadcasting!");
                         }
                     }
                 }
             }
             int* bmm_shape = (int*) malloc(3 * sizeof(int));
             if (bmm_shape == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             }
             bmm_shape[0] = 1;
             for (size_t i = 0; i < broadcast_dim_len - 2; ++i) {
@@ -804,10 +802,10 @@ Matrix Matrix::matmul(Matrix &other) {
             bmm_shape[1] = dims[1];
 
             //matmul
-            int n_threads = thread::hardware_concurrency();
+            int n_threads = std::thread::hardware_concurrency();
 
             //Avoid malloc to call constructor
-            thread* threads = new thread[n_threads];
+            std::thread* threads = new std::thread[n_threads];
 
             size_t size = bmm_shape[0] * dims[dim_len - 2] * bmm_shape[2] * sizeof(float);
             size_t remainder = size % 16;
@@ -818,12 +816,12 @@ Matrix Matrix::matmul(Matrix &other) {
             float* data_out = (float*) aligned_alloc(16, size);
 
             if (data_out == nullptr) {
-                throw invalid_argument("Memory allocation error");
+                throw std::invalid_argument("Memory allocation error");
             } 
             
             //each thread handles an set of indivisual slices (divided evenly between all possible threads)
             for (size_t t = 0; t < n_threads; ++t) {
-                threads[t] = thread([&, t]() {
+                threads[t] = std::thread([&, t]() {
                     for (size_t i = t; i < bmm_shape[0]; i += n_threads) {
                         matmul_cpu_batched(data, other.get_data(), data_out, dims[dim_len - 2],
                                         dims[dim_len - 1], bmm_shape[2], i);
@@ -847,10 +845,9 @@ Matrix Matrix::matmul(Matrix &other) {
 
             return ret;
         } else {
-            throw invalid_argument("Invalid batched matrix-matrix product dimensions!");
+            throw std::invalid_argument("Invalid batched matrix-matrix product dimensions!");
         }
     }
-    cout << "INVALID";
     return invalid();
 }   
 
@@ -863,7 +860,7 @@ Matrix Matrix::scmul(float s) {
     float* data_out = (float*) aligned_alloc(16, aligned_data_len);
 
     if (data_out == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     } 
 
     float32x4_t scalar = vdupq_n_f32(s);
@@ -891,14 +888,14 @@ Matrix Matrix::add(const Matrix& other) {
 
     for (size_t i = 0; i < dim_len; ++i){
         if (dims[i] != other.get_dims_index(i)) {
-            throw invalid_argument("Invalid matrix dimensions!");
+            throw std::invalid_argument("Invalid matrix dimensions!");
         }
     }
 
     float* data_out = (float*) aligned_alloc(16, aligned_data_len);
 
     if (data_out == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
     
     const float* oPtr = other.get_data();
@@ -928,14 +925,14 @@ Matrix Matrix::subtract(const Matrix& other) {
 
     for (size_t i = 0; i < dim_len; ++i){
         if (dims[i] != other.get_dims_index(i)) {
-            throw invalid_argument("Invalid matrix dimensions!");
+            throw std::invalid_argument("Invalid matrix dimensions!");
         }
     }
 
     float* data_out = (float*) aligned_alloc(16, aligned_data_len);
 
     if (data_out == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
     
     const float* oPtr = other.get_data();
@@ -966,7 +963,7 @@ Matrix Matrix::apply(float (*func)(float)) {
     float* data_out = (float*) aligned_alloc(16, aligned_data_len);
 
     if (data_out == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
     
     for (size_t i = 0; i < data_len; ++i) {
@@ -983,7 +980,7 @@ Matrix Matrix::transpose2d() {
         float* data_out = (float*) aligned_alloc(16, aligned_data_len);
 
         if (data_out == nullptr) {
-            throw invalid_argument("Memory allocation error");
+            throw std::invalid_argument("Memory allocation error");
         }
 
         simd_transpose(data, data_out, dims[0], dims[1]);
@@ -991,7 +988,7 @@ Matrix Matrix::transpose2d() {
         int* dims_new = (int*) malloc(dim_len * sizeof(int));
 
         if (dims_new == nullptr) {
-            throw invalid_argument("Memory allocation error");
+            throw std::invalid_argument("Memory allocation error");
         }
 
         dims_new[0] = dims[1];
@@ -1000,7 +997,7 @@ Matrix Matrix::transpose2d() {
         Matrix ret = Matrix(dims_new, dim_len, data_out, false);
         return ret;
     } else {
-        throw invalid_argument("Invalid matrix dimensions! Must be 2d");
+        throw std::invalid_argument("Invalid matrix dimensions! Must be 2d");
     }
 }
 
@@ -1025,7 +1022,7 @@ void Matrix::add_inplace(const Matrix& other) {
 
     for (size_t i = 0; i < dim_len; ++i){
         if (dims[i] != other.get_dims_index(i)) {
-            throw invalid_argument("Invalid matrix dimensions!");
+            throw std::invalid_argument("Invalid matrix dimensions!");
         }
     }
     
@@ -1050,7 +1047,7 @@ void Matrix::add_inplace(const Matrix& other) {
 void Matrix::subtract_inplace(const Matrix& other) {
     for (size_t i = 0; i < dim_len; ++i){
         if (dims[i] != other.get_dims_index(i)) {
-            throw invalid_argument("Invalid matrix dimensions!");
+            throw std::invalid_argument("Invalid matrix dimensions!");
         }
     }
     
@@ -1081,7 +1078,7 @@ void Matrix::apply_inplace(float (*func)(float)) {
 void Matrix::transpose_shallow(int* axes) {
     int* dists_c = (int*) malloc(dim_len * sizeof(int));
     if (dists_c == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
     for (size_t i = 0; i < dim_len; ++i) {
         dists_c[i] = dists[axes[i]];
@@ -1098,7 +1095,7 @@ float Matrix::get(const initializer_list<int> &pos) const {
 
 float Matrix::get_index(int i) const {
     if (i < 0 || i > data_len-1){
-        throw invalid_argument("Invalid index!");
+        throw std::invalid_argument("Invalid index!");
     }
     return data[i];
 }
@@ -1109,14 +1106,14 @@ void Matrix::set(const initializer_list<int> &pos, float val) {
 
 void Matrix::set_index(int i, float val) {
     if (i < 0 || i > data_len-1) {
-        throw invalid_argument("Invalid index!");
+        throw std::invalid_argument("Invalid index!");
     }
     data[i] = val;
 }
 
 int Matrix::get_dims_index(int i) const {
     if (i < 0 || i > dim_len-1) {
-        throw invalid_argument("Invalid index!");
+        throw std::invalid_argument("Invalid index!");
     }
     return dims[i];
 }
@@ -1128,7 +1125,7 @@ int Matrix::get_dim_len() const {
 int* Matrix::get_dists_clone() const {
     int* dists_clone = (int*) malloc(dim_len * sizeof(int));
     if (dists_clone == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
     for (size_t i = 0; i < dim_len; ++i) {
         dists_clone[i] = dists[i];
@@ -1139,7 +1136,7 @@ int* Matrix::get_dists_clone() const {
 int* Matrix::get_dims_clone() const {
     int* dims_clone = (int*) malloc(dim_len * sizeof(int));
     if (dims_clone == nullptr) {
-        throw invalid_argument("Memory allocation error");
+        throw std::invalid_argument("Memory allocation error");
     }
     for (size_t i = 0; i < dim_len; ++i) {
         dims_clone[i] = dims[i];
@@ -1167,22 +1164,22 @@ float* Matrix::get_data() const {
 }
 
 void Matrix::print_data(int m) const {
-    int end = min(data_len, m);
+    int end = std::min(data_len, m);
     for (size_t i = 0; i < end; ++i) {
-        cout << data[i];
+        std::cout << data[i];
         if (i < end - 1) {
-             cout << ", ";
+             std::cout << ", ";
         }
     }
-    cout << "\n";
+    std::cout << "\n";
 }
 
 void Matrix::print_dims() const {
     for (size_t i = 0; i < dim_len; ++i) {
-        cout << dims[i];
-        cout << " ";
+        std::cout << dims[i];
+        std::cout << " ";
     }
-    cout << "\n";
+    std::cout << "\n";
 }
 
 
