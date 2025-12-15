@@ -39,9 +39,11 @@ public:
     Matrix scmul(float s);
     Matrix add(const Matrix &other);
     Matrix subtract(const Matrix &other);
+    Matrix apply(float (*func)(float));
     void scmul_inplace(float s);
     void add_inplace(const Matrix &other);
     void subtract_inplace(const Matrix &other);
+    void apply_inplace(float (*func)(float));
     void transpose(int* axes);
     float get(const initializer_list<int> &pos) const;
     float get_index(int i) const;

@@ -962,6 +962,22 @@ Matrix Matrix::subtract(const Matrix& other) {
     return ret;
 }
 
+Matrix Matrix::apply(float (*func)(float)) {
+
+    float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+
+    if (data_out == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+    
+    for (size_t i = 0; i < data_len; ++i) {
+        data_out[i] = func(data[i]);
+    }
+
+    Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+    return ret;
+}
+
 void Matrix::scmul_inplace(float s) {
 
     float32x4_t scalar = vdupq_n_f32(s);
@@ -1027,6 +1043,12 @@ void Matrix::subtract_inplace(const Matrix& other) {
 
     for (size_t i = 0; i < data_len % 4; ++i) {
         tPtr[i] = tPtr[i] - oPtr[i];
+    }
+}
+
+void Matrix::apply_inplace(float (*func)(float)) {
+    for (size_t i = 0; i < data_len; ++i) {
+        data[i] = func(data[i]);
     }
 }
 
