@@ -18,10 +18,10 @@ private:
     bool copy;
     
     int convert_idx(initializer_list<int> pos) const; 
-    void matmul_cuda(float* A, float* B, float* C, int n, int m, int k);
-    void matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int k, int z);
-    void matmul_cpu(float* A, float* B, float* C, int n, int m, int k);
-    void simd_transpose(float* A, float* B, int n, int m, int z = 0); //INTERNAL USE ONLY
+    void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k);
+    void matmul_cpu_batched(const float* A, const float* B, float* C, const int* other_dists, int n, int m, int k, int z);
+    void matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k);
+    void simd_transpose(const float* A, float* B, int n, int m, int z = 0, const int* dists_new = nullptr); //INTERNAL USE ONLY
     int* get_dims_clone() const;
     int* get_dists_clone() const;
     void set_dim_len(int dim_len_n); // UNCHECKED
@@ -55,9 +55,12 @@ public:
     int* get_broadcasted_strides(int* dims_new, int dim_len_new) const;
     int get_dims_index(int i) const;
     int get_dim_len() const;
+    int* get_dims() const;
+    int* get_dists() const;
     float* get_data() const;
     void print_dims() const;
-    void print_data(int m = 50) const;
+    void print_dists() const;
+    void print_data(int max = 50) const;
     static void set_CUDA(bool c);
     static bool get_CUDA();
     
