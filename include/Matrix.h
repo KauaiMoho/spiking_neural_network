@@ -13,6 +13,7 @@ private:
     int* dists;
     int dim_len;
     int data_len;
+    size_t aligned_data_len;
     static bool cuda;
     bool copy;
     
@@ -30,13 +31,17 @@ private:
 public:
     
     Matrix(int* dims_n, int dim_len, float* data_n, bool copy = true);
-    Matrix(int* dims_n, int dim_len, int val);
+    Matrix(int* dims_n, int dim_len, float val);
+    Matrix(int* dims_n, int dim_len, unsigned int random_seed = 0);
     ~Matrix();
     Matrix matmul(Matrix &other);
     Matrix clone() const;
-    void scmul(float s);
-    void add(const Matrix &a);
-    void subtract(const Matrix &a);
+    Matrix scmul(float s);
+    Matrix add(const Matrix &other);
+    Matrix subtract(const Matrix &other);
+    void scmul_inplace(float s);
+    void add_inplace(const Matrix &other);
+    void subtract_inplace(const Matrix &other);
     void transpose(int* axes);
     float get(const initializer_list<int> &pos) const;
     float get_index(int i) const;

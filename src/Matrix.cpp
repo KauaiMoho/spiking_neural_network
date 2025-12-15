@@ -6,6 +6,8 @@ using std::initializer_list;
 #include <iostream>
 #include <thread>
 #include <arm_neon.h>
+#include <random>
+#include <optional>
 
 //Default do not use CUDA
 bool Matrix::cuda = false;
@@ -39,23 +41,25 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
         data_len = pos*dims[0];
 
 
-        size_t size = data_len * sizeof(float);
-        size_t remainder = size % 16;
+        aligned_data_len = data_len * sizeof(float);
+        size_t remainder = aligned_data_len % 16;
         if (remainder != 0) {
-            size += 16 - remainder;
+            aligned_data_len += 16 - remainder;
         }
 
-        data = (float*) aligned_alloc(16, size);
+        data = (float*) aligned_alloc(16, aligned_data_len);
 
         if (data == nullptr) {
             throw invalid_argument("Memory allocation error");
         }
 
-        for (int i = 0; i < data_len; ++i) {
+        for (size_t i = 0; i < data_len; ++i) {
             data[i] = data_n[i];
         }
     } else {
         dims = dims_n;
+
+        //NEEDS TO BE ALIGNED
         data = data_n;
 
         dists = (int*) malloc(dim_len * sizeof(int));
@@ -74,7 +78,7 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
     }
 }
 
-Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
+Matrix::Matrix(int* dims_n, int dim_len, float val) : dim_len(dim_len) {
 
     if (dim_len == 0) throw invalid_argument("Matrix dimensions cannot be empty!");
     dists = (int*) malloc(dim_len * sizeof(int));
@@ -99,19 +103,69 @@ Matrix::Matrix(int* dims_n, int dim_len, int val) : dim_len(dim_len) {
     dists[0] = pos;
     data_len = pos*dims[0];
 
-    size_t size = data_len * sizeof(float);
-    size_t remainder = size % 16;
+    aligned_data_len = data_len * sizeof(float);
+    size_t remainder = aligned_data_len % 16;
     if (remainder != 0) {
-        size += 16 - remainder;
+        aligned_data_len += 16 - remainder;
     }
 
-    data = (float*) aligned_alloc(16, size);
+    data = (float*) aligned_alloc(16, aligned_data_len);
 
     if (data == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
 
-    for (int i = 0; i < data_len; ++i) {
+    for (size_t i = 0; i < data_len; ++i) {
+        data[i] = val;
+    }
+}
+
+Matrix::Matrix(int* dims_n, int dim_len, unsigned int random_seed) : dim_len(dim_len) {
+
+    if (random_seed == 0) {
+        std::random_device rd;
+        random_seed = rd();
+    }
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    std::mt19937 gen(random_seed);
+    float val = dist(gen);
+
+    if (dim_len == 0) throw invalid_argument("Matrix dimensions cannot be empty!");
+    dists = (int*) malloc(dim_len * sizeof(int));
+
+    if (dists == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+
+    dims = (int*) malloc(dim_len * sizeof(int));
+
+    if (dims == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+
+    int pos = 1;
+    for (int i = dim_len - 1; i > 0 ; i--) {
+        dists[i] = pos;
+        dims[i] = dims_n[i];
+        pos *= dims[i];
+    }
+    dims[0] = dims_n[0];
+    dists[0] = pos;
+    data_len = pos*dims[0];
+
+    aligned_data_len = data_len * sizeof(float);
+    size_t remainder = aligned_data_len % 16;
+    if (remainder != 0) {
+        aligned_data_len += 16 - remainder;
+    }
+
+    data = (float*) aligned_alloc(16, aligned_data_len);
+
+    if (data == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+
+    for (size_t i = 0; i < data_len; ++i) {
         data[i] = val;
     }
 }
@@ -182,11 +236,11 @@ void Matrix::reshape(int* dims_new, int dim_len_new) {
     //Will change between any dimensions as long as both dimensions have the same total size
     //Data not modified, only stride and dimension array modified
     int dim_size_old = 1;
-    for (int i = 0; i < dim_len; ++i) {
+    for (size_t i = 0; i < dim_len; ++i) {
         dim_size_old *= dims[i];
     }
     int dim_size_new = 1;
-    for (int i = 0; i < dim_len_new; ++i) {
+    for (size_t i = 0; i < dim_len_new; ++i) {
         dim_size_new *= dims_new[i];
     }
     if (dim_size_old == dim_size_new) {
@@ -229,7 +283,7 @@ void Matrix::broadcast(int* dims_new, int dim_len_new) {
         if (dims == nullptr) {
             throw invalid_argument("Memory allocation error");
         }
-        for (int i = 0; i < dim_len_new; ++i) {
+        for (size_t i = 0; i < dim_len_new; ++i) {
             dims[i] = dims_new[i];
         }
         dim_len = dim_len_new;
@@ -286,23 +340,23 @@ void Matrix::matmul_cpu_batched(float* A, float* B, float* C, int n, int m, int 
     for (int ic = 0; ic < n; ic += tile){
         for (int lc = 0; lc < k; lc += tile){
             int iE = min(ic+tile, n);
-            for (int i = ic; i < iE; ++i){
+            for (size_t i = ic; i < iE; ++i){
                 int lE = min(lc+tile, k);
-                for (int l = lc; l < lE; ++l){
+                for (size_t l = lc; l < lE; ++l){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (int jc = 0; jc < m; jc += tile) {
                         int jE =  min(jc+tile, m);
                         float* ptrA = &A[n*m*z + i*m + jc];
                         float* ptrB = &B_t[l*m + jc];
-                        for (int j = jc; j + 3 < jE; j += 4) {
+                        for (size_t j = jc; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
                             ptrA += 4;
                             ptrB += 4;
                             acc = vaddq_f32(acc, vmulq_f32(a, b));
                         }
-                        for (int j = jE - (jE%4); j < jE; ++j) {
+                        for (size_t j = 0; j < (jE%4); ++j) {
                             sum += (*ptrA) * (*ptrB);
                             ptrA += 1;
                             ptrB += 1;
@@ -372,23 +426,23 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
     for (int ic = 0; ic < n; ic += tile){
         for (int lc = 0; lc < k; lc += tile){
             int iE = min(ic+tile, n);
-            for (int i = ic; i < iE; ++i){
+            for (size_t i = ic; i < iE; ++i){
                 int lE = min(lc+tile, k);
-                for (int l = lc; l < lE; ++l){
+                for (size_t l = lc; l < lE; ++l){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (int jc = 0; jc < m; jc += tile) {
                         int jE =  min(jc+tile, m);
                         float* ptrA = &A[i*m + jc];
                         float* ptrB = &B_t[l*m + jc];
-                        for (int j = jc; j + 3 < jE; j += 4) {
+                        for (size_t j = jc; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
                             ptrA += 4;
                             ptrB += 4;
                             acc = vaddq_f32(acc, vmulq_f32(a, b));
                         }
-                        for (int j = jE - (jE%4); j < jE; ++j) {
+                        for (size_t j = 0; j < (jE%4); ++j) {
                             sum += (*ptrA) * (*ptrB);
                             ptrA += 1;
                             ptrB += 1;
@@ -404,14 +458,14 @@ void Matrix::matmul_cpu(float* A, float* B, float* C, int n, int m, int k) {
 }
 void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
 
-    int tile = 16;
-    int offset = n*m*z;
+    size_t tile = 16;
+    size_t offset = n*m*z;
     
     //Tile for same reasons as matmul (minimize cache misses)
-    for (int ic = 0; ic + tile <= n; ic += tile) {
-        for (int jc = 0; jc + tile <= m; jc += tile) {
-            for (int i = ic; i < ic+tile; i += 4) {
-                for (int j = jc; j < jc+tile; j += 4) {
+    for (size_t ic = 0; ic + tile <= n; ic += tile) {
+        for (size_t jc = 0; jc + tile <= m; jc += tile) {
+            for (size_t i = ic; i < ic+tile; i += 4) {
+                for (size_t j = jc; j < jc+tile; j += 4) {
                     //Load 16 elements from A to tranpose into B
                     float32x4_t a = vld1q_f32(&A[(i+0)*m + j + offset]);
                     float32x4_t b = vld1q_f32(&A[(i+1)*m + j + offset]);
@@ -461,8 +515,8 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
     //Scalar Clean up what was missed by tiling
 
     //Handles leftover rows top right rectangle and bottom right corner
-    for (int i = n-(n%tile); i < n; ++i) {
-        for (int j = 0; j < m; ++j) {
+    for (size_t i = n-(n%tile); i < n; ++i) {
+        for (size_t j = 0; j < m; ++j) {
             B[j*n + i] = A[i*m + j + offset];
         }
     }
@@ -473,8 +527,8 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
 
     //Handle leftover colouns (ignoring final few rows overlapping with above loop)
     //Basically the bottom left rectangle 
-    for (int i = 0; i < n-(n%tile); ++i) {
-        for (int j = m-(m%tile); j < m; ++j) {
+    for (size_t i = 0; i < n-(n%tile); ++i) {
+        for (size_t j = m-(m%tile); j < m; ++j) {
             B[j*n + i] = A[i*m + j + offset];
         }
     }
@@ -482,9 +536,12 @@ void Matrix::simd_transpose(float* A, float* B, int n, int m, int z) {
 }
 
 Matrix Matrix::matmul(Matrix &other) {
+
+    int tile = 16;
     
     if (other.get_dim_len() == 1 && dim_len == 1) {
         //Dimension 1 x 1 = Dot product
+        
         if (other.get_dims_index(0) == dims[0]) {
             int* new_dims = (int*) malloc(sizeof(int));
             if (new_dims == nullptr) {
@@ -492,10 +549,25 @@ Matrix Matrix::matmul(Matrix &other) {
             }
             new_dims[0] = 1;
             float data_out = 0;
-            float* data_temp = other.get_data();
-            for (int i = 0; i < data_len; ++i) {
-                data_out += data[i]*data_temp[i];
+            float32x4_t acc = vdupq_n_f32(0.0f);
+            for (int jc = 0; jc < data_len; jc += tile) {
+                int jE =  min(jc+tile, data_len);
+                const float* oPtr = other.get_data() + jc;
+                float* tPtr = data + jc;
+                for (size_t j = jc; j + 3 < jE; j += 4) {
+                    float32x4_t a = vld1q_f32(oPtr);
+                    float32x4_t b = vld1q_f32(tPtr);
+                    oPtr += 4;
+                    tPtr += 4;
+                    acc = vaddq_f32(acc, vmulq_f32(a, b));
+                }
+                for (size_t j = 0; j < (jE%4); ++j) {
+                    data_out += (*oPtr) * (*tPtr);
+                    oPtr += 1;
+                    tPtr += 1;
+                }
             }
+            data_out += vaddvq_f32(acc);
             Matrix ret = Matrix(new_dims, 1, data_out);
             free(new_dims);
             return ret;
@@ -503,6 +575,8 @@ Matrix Matrix::matmul(Matrix &other) {
         throw invalid_argument("Invalid dot product dimensions!");
     } else if (other.get_dim_len() == 1 && dim_len == 2) {
         // dimension 2 x 1 = Vector Product
+
+        //n x m X m x 1 = n x 1
         if (other.get_dims_index(0) == dims[1]) {
             int* new_dims = (int*) malloc(sizeof(int));
             if (new_dims == nullptr) {
@@ -521,13 +595,34 @@ Matrix Matrix::matmul(Matrix &other) {
             if (data_out == nullptr) {
                 throw invalid_argument("Memory allocation error");
             }
-            for (int i = 0; i < new_dims[0]; ++i) {
-                float sum = 0;
-                for (int j = 0; j < dims[1]; ++j) {
-                    sum += get({i, j})*other.get({j});
-                }
-                data_out[i] = sum;
+
+            for (int ic = 0; ic < new_dims[0]; ic += tile){
+                int iE = min(ic+tile, new_dims[0]);
+                for (size_t i = ic; i < iE; ++i){
+                    float sum = 0;
+                    float32x4_t acc = vdupq_n_f32(0.0f);
+                    for (int jc = 0; jc < dims[1]; jc += tile) {
+                        int jE =  min(jc+tile, dims[1]);
+                        float* ptrA = &data[i*dims[1] + jc];
+                        float* ptrB = &(other.get_data()[jc]);
+                        for (size_t j = jc; j + 3 < jE; j += 4) {
+                            float32x4_t a = vld1q_f32(ptrA);
+                            float32x4_t b = vld1q_f32(ptrB);
+                            ptrA += 4;
+                            ptrB += 4;
+                            acc = vaddq_f32(acc, vmulq_f32(a, b));
+                        }
+                        for (size_t j = 0; j < (jE%4); ++j) {
+                            sum += (*ptrA) * (*ptrB);
+                            ptrA += 1;
+                            ptrB += 1;
+                        }
+                    }
+                    sum += vaddvq_f32(acc);
+                    data_out[i] = sum;
+                }   
             }
+
             Matrix ret = Matrix(new_dims, 1, data_out, false);
             return ret;
         }
@@ -541,6 +636,8 @@ Matrix Matrix::matmul(Matrix &other) {
             }
             new_dims[0] = other.get_dims_index(0);
 
+            int other_dim = other.get_dims_index(1);
+
             size_t size = new_dims[0] * sizeof(float);
             size_t remainder = size % 16;
             if (remainder != 0) {
@@ -552,6 +649,35 @@ Matrix Matrix::matmul(Matrix &other) {
             if (data_out == nullptr) {
                 throw invalid_argument("Memory allocation error");
             }
+
+            for (int ic = 0; ic < new_dims[0]; ic += tile){
+                int iE = min(ic+tile, new_dims[0]);
+                for (size_t i = ic; i < iE; ++i){
+                    float sum = 0;
+                    float32x4_t acc = vdupq_n_f32(0.0f);
+                    for (int jc = 0; jc < other_dim; jc += tile) {
+                        int jE =  min(jc+tile, other_dim);
+                        float* ptrA = &(other.get_data()[i*other_dim + jc]);
+                        float* ptrB = &data[jc];
+                        for (size_t j = jc; j + 3 < jE; j += 4) {
+                            float32x4_t a = vld1q_f32(ptrA);
+                            float32x4_t b = vld1q_f32(ptrB);
+                            ptrA += 4;
+                            ptrB += 4;
+                            acc = vaddq_f32(acc, vmulq_f32(a, b));
+                        }
+                        for (size_t j = 0; j < (jE%4); ++j) {
+                            sum += (*ptrA) * (*ptrB);
+                            ptrA += 1;
+                            ptrB += 1;
+                        }
+                    }
+                    sum += vaddvq_f32(acc);
+                    data_out[i] = sum;
+                }   
+            }
+
+
             for (int i = 0; i < new_dims[0]; ++i) {
                 float sum = 0;
                 for (int j = 0; j < dims[0]; ++j) {
@@ -647,7 +773,7 @@ Matrix Matrix::matmul(Matrix &other) {
                 throw invalid_argument("Memory allocation error");
             }
             bmm_shape[0] = 1;
-            for (int i = 0; i < broadcast_dim_len - 2; ++i) {
+            for (size_t i = 0; i < broadcast_dim_len - 2; ++i) {
                 bmm_shape[0] *= broadcast_dims[i];
             }
 
@@ -697,15 +823,15 @@ Matrix Matrix::matmul(Matrix &other) {
             } 
             
             //each thread handles an set of indivisual slices (divided evenly between all possible threads)
-            for (int t = 0; t < n_threads; ++t) {
+            for (size_t t = 0; t < n_threads; ++t) {
                 threads[t] = thread([&, t]() {
-                    for (int i = t; i < bmm_shape[0]; i += n_threads) {
+                    for (size_t i = t; i < bmm_shape[0]; i += n_threads) {
                         matmul_cpu_batched(data, other.get_data(), data_out, dims[dim_len - 2],
                                         dims[dim_len - 1], bmm_shape[2], i);
                     }
                 });
             }
-            for (int i = 0; i < n_threads; ++i) {
+            for (size_t i = 0; i < n_threads; ++i) {
                 threads[i].join();
             }
 
@@ -733,70 +859,174 @@ Matrix Matrix::clone() const {
     return Matrix(dims, dim_len, data);
 }
 
-void Matrix::scmul(float s) {
+Matrix Matrix::scmul(float s) {
+
+    float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+
+    if (data_out == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    } 
+
+    float32x4_t scalar = vdupq_n_f32(s);
+    float* tPtr = data;
+    float* outPtr = data_out;
+
+    for (size_t i = 0; i + 3 < data_len; i += 4) {
+        float32x4_t t = vld1q_f32(tPtr);
+        float32x4_t res = vmulq_f32(t, scalar);
+        vst1q_f32(outPtr, res);
+        tPtr += 4;
+        outPtr += 4;
+    }
+
+    for (size_t i = 0; i < data_len % 4; ++i) {
+        outPtr[i] = tPtr[i] * s;
+    }
+
+    Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+    return ret;
+}
+
+
+Matrix Matrix::add(const Matrix& other) {
+
+    for (size_t i = 0; i < dim_len; ++i){
+        if (dims[i] != other.get_dims_index(i)) {
+            throw invalid_argument("Invalid matrix dimensions!");
+        }
+    }
+
+    float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+
+    if (data_out == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+    
+    const float* oPtr = other.get_data();
+    float* tPtr = data;
+    float* outPtr = data_out;
+
+    for (size_t i = 0; i + 3 < data_len; i += 4) {
+
+        float32x4_t af = vld1q_f32(oPtr);
+        float32x4_t tf = vld1q_f32(tPtr);
+        float32x4_t add = vaddq_f32(af, tf);
+        vst1q_f32(outPtr, add);
+        oPtr += 4;
+        tPtr += 4;
+        outPtr += 4;
+    }
+
+    for (size_t i = 0; i < data_len % 4; ++i) {
+        outPtr[i] = tPtr[i] + oPtr[i];
+    }
+
+    Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+    return ret;
+}
+
+Matrix Matrix::subtract(const Matrix& other) {
+
+    for (size_t i = 0; i < dim_len; ++i){
+        if (dims[i] != other.get_dims_index(i)) {
+            throw invalid_argument("Invalid matrix dimensions!");
+        }
+    }
+
+    float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+
+    if (data_out == nullptr) {
+        throw invalid_argument("Memory allocation error");
+    }
+    
+    const float* oPtr = other.get_data();
+    float* tPtr = data;
+    float* outPtr = data_out;
+
+    for (size_t i = 0; i + 3 < data_len; i += 4) {
+
+        float32x4_t af = vld1q_f32(oPtr);
+        float32x4_t tf = vld1q_f32(tPtr);
+        float32x4_t sub = vsubq_f32(tf, af);
+        vst1q_f32(outPtr, sub);
+        oPtr += 4;
+        tPtr += 4;
+        outPtr += 4;
+    }
+
+    for (size_t i = 0; i < data_len % 4; ++i) {
+        outPtr[i] = tPtr[i] - oPtr[i];
+    }
+
+    Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+    return ret;
+}
+
+void Matrix::scmul_inplace(float s) {
 
     float32x4_t scalar = vdupq_n_f32(s);
     float* tPtr = data;
 
-    for (int i = 0; i + 3 < data_len; i += 4) {
+    for (size_t i = 0; i + 3 < data_len; i += 4) {
         float32x4_t t = vld1q_f32(tPtr);
         float32x4_t res = vmulq_f32(t, scalar);
         vst1q_f32(tPtr, res);
         tPtr += 4;
     }
 
-    for (int i = data_len - (data_len % 4); i < data_len; ++i) {
-        data[i] = data[i] * s;
+    for (size_t i = 0; i < data_len % 4; ++i) {
+        tPtr[i] = tPtr[i] * s;
     }
 }
 
-void Matrix::add(const Matrix& a) {
-    for (int i = 0; i < dim_len; ++i){
-        if (dims[i] != a.get_dims_index(i)) {
+void Matrix::add_inplace(const Matrix& other) {
+
+    for (size_t i = 0; i < dim_len; ++i){
+        if (dims[i] != other.get_dims_index(i)) {
             throw invalid_argument("Invalid matrix dimensions!");
         }
     }
     
-    const float* aPtr = a.get_data();
+    const float* oPtr = other.get_data();
     float* tPtr = data;
 
-    for (int i = 0; i + 3 < data_len; i += 4) {
+    for (size_t i = 0; i + 3 < data_len; i += 4) {
 
-        float32x4_t af = vld1q_f32(aPtr);
+        float32x4_t af = vld1q_f32(oPtr);
         float32x4_t tf = vld1q_f32(tPtr);
         float32x4_t add = vaddq_f32(af, tf);
         vst1q_f32(tPtr, add);
-        aPtr += 4;
+        oPtr += 4;
         tPtr += 4;
     }
 
-    for (int i = data_len - (data_len % 4); i < data_len; ++i) {
-        data[i] = data[i] + a.get_index(i);
+    for (size_t i = 0; i < data_len % 4; ++i) {
+        tPtr[i] = tPtr[i] + oPtr[i];
     }
 }
 
-void Matrix::subtract(const Matrix& a) {
-    for (int i = 0; i < dim_len; ++i){
-        if (dims[i] != a.get_dims_index(i)) {
+void Matrix::subtract_inplace(const Matrix& other) {
+    for (size_t i = 0; i < dim_len; ++i){
+        if (dims[i] != other.get_dims_index(i)) {
             throw invalid_argument("Invalid matrix dimensions!");
         }
     }
     
-    const float* aPtr = a.get_data();
+    const float* oPtr = other.get_data();
     float* tPtr = data;
 
-    for (int i = 0; i + 3 < data_len; i += 4) {
+    for (size_t i = 0; i + 3 < data_len; i += 4) {
 
-        float32x4_t af = vld1q_f32(aPtr);
+        float32x4_t af = vld1q_f32(oPtr);
         float32x4_t tf = vld1q_f32(tPtr);
         float32x4_t sub = vsubq_f32(tf, af);
         vst1q_f32(tPtr, sub);
-        aPtr += 4;
+        oPtr += 4;
         tPtr += 4;
     }
 
-    for (int i = data_len - (data_len % 4); i < data_len; ++i) {
-        data[i] = data[i] - a.get_index(i);
+    for (size_t i = 0; i < data_len % 4; ++i) {
+        tPtr[i] = tPtr[i] - oPtr[i];
     }
 }
 
@@ -805,10 +1035,10 @@ void Matrix::transpose(int* axes) {
     if (dists_c == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
-    for (int i = 0; i < dim_len; ++i) {
+    for (size_t i = 0; i < dim_len; ++i) {
         dists_c[i] = dists[axes[i]];
     }
-    for (int i = 0; i < dim_len; ++i) {
+    for (size_t i = 0; i < dim_len; ++i) {
         dists[i] = dists_c[i];
     }
     free(dists_c);
@@ -852,7 +1082,7 @@ int* Matrix::get_dists_clone() const {
     if (dists_clone == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
-    for (int i = 0; i < dim_len; ++i) {
+    for (size_t i = 0; i < dim_len; ++i) {
         dists_clone[i] = dists[i];
     }
     return dists_clone;
@@ -863,7 +1093,7 @@ int* Matrix::get_dims_clone() const {
     if (dims_clone == nullptr) {
         throw invalid_argument("Memory allocation error");
     }
-    for (int i = 0; i < dim_len; ++i) {
+    for (size_t i = 0; i < dim_len; ++i) {
         dims_clone[i] = dims[i];
     }
     return dims_clone;
@@ -890,7 +1120,7 @@ float* Matrix::get_data() const {
 
 void Matrix::print_data(int m) const {
     int end = min(data_len, m);
-    for (int i = 0; i < end; ++i) {
+    for (size_t i = 0; i < end; ++i) {
         cout << data[i];
         if (i < end - 1) {
              cout << ", ";
@@ -900,7 +1130,7 @@ void Matrix::print_data(int m) const {
 }
 
 void Matrix::print_dims() const {
-    for (int i = 0; i < dim_len; ++i) {
+    for (size_t i = 0; i < dim_len; ++i) {
         cout << dims[i];
         cout << " ";
     }
