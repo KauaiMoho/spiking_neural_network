@@ -170,13 +170,12 @@ Matrix::Matrix(int* dims_n, int dim_len, unsigned int random_seed) : dim_len(dim
     }
 }
 
+
 Matrix::~Matrix() {
-    //TODO: Bugged
-    if (data != nullptr) {
+    //NOTE, CANNOT USE = operator: Matrix A = B
+    if (copy) {
         free(data);
-    }
-    if (dims != nullptr) {
-        free (dims);
+        free(dims);
     }
     free(dists);
 }
@@ -978,6 +977,33 @@ Matrix Matrix::apply(float (*func)(float)) {
     return ret;
 }
 
+Matrix Matrix::transpose2d() {
+    if (dim_len == 2) {
+
+        float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+
+        if (data_out == nullptr) {
+            throw invalid_argument("Memory allocation error");
+        }
+
+        simd_transpose(data, data_out, dims[0], dims[1]);
+
+        int* dims_new = (int*) malloc(dim_len * sizeof(int));
+
+        if (dims_new == nullptr) {
+            throw invalid_argument("Memory allocation error");
+        }
+
+        dims_new[0] = dims[1];
+        dims_new[1] = dims[0];
+
+        Matrix ret = Matrix(dims_new, dim_len, data_out, false);
+        return ret;
+    } else {
+        throw invalid_argument("Invalid matrix dimensions! Must be 2d");
+    }
+}
+
 void Matrix::scmul_inplace(float s) {
 
     float32x4_t scalar = vdupq_n_f32(s);
@@ -1052,7 +1078,7 @@ void Matrix::apply_inplace(float (*func)(float)) {
     }
 }
 
-void Matrix::transpose(int* axes) {
+void Matrix::transpose_shallow(int* axes) {
     int* dists_c = (int*) malloc(dim_len * sizeof(int));
     if (dists_c == nullptr) {
         throw invalid_argument("Memory allocation error");
