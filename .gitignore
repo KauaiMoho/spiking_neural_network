@@ -2,3 +2,4 @@ Makefile
 program
 .vscode/*
 *.o
+matrix_tests
