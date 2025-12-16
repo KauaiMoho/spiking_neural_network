@@ -56,6 +56,48 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n) : dim_len(dim_len) {
     }
 }
 
+Matrix::Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists_n) : dim_len(dim_len), data_len(data_len) {
+    if (dim_len == 0) {
+        throw std::invalid_argument("Matrix dimensions cannot be empty!");
+    }
+
+    copy = true;
+
+    //Will copy dists as well incase of broadcasting
+    dists = (int*) malloc(dim_len * sizeof(int));
+
+    if (dists == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
+    dims = (int*) malloc(dim_len * sizeof(int));
+
+    if (dims == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
+    for (int i = 0; i < dim_len ; ++i) {
+        dists[i] = dists_n[i];
+        dims[i] = dims_n[i];
+    }
+
+    aligned_data_len = data_len * sizeof(float);
+    size_t remainder = aligned_data_len % 16;
+    if (remainder != 0) {
+        aligned_data_len += 16 - remainder;
+    }
+
+    data = (float*) aligned_alloc(16, aligned_data_len);
+
+    if (data == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
+    for (size_t i = 0; i < data_len; ++i) {
+        data[i] = data_n[i];
+    }
+}
+
 Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim_len), copy(copy) {
     if (dim_len == 0) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
@@ -300,6 +342,30 @@ int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) const {
     return dists_new;
 }
 
+void Matrix::broadcast(int* dims_new, int dim_len_new) {
+    //Dim_len_new must always be >= dim_len
+
+    //Broadcast -> Given two sets of dimensions, will add extra dimensions to the shorter one such that the numbers are extended to match dimensions
+    //Useful for a BLAS library when multiplying matrices of unequal dimension
+    //Data not modified, only stride and dimension array modified
+    if (dim_len_new >= dim_len) {
+        int* dists_new = get_broadcasted_strides(dims_new, dim_len_new);
+        free(dists);
+        free(dims);
+        dists = dists_new;
+        dims = (int*) malloc(dim_len_new * sizeof(int));
+        if (dims == nullptr) {
+            throw std::invalid_argument("Memory allocation error");
+        }
+        for (size_t i = 0; i < dim_len_new; ++i) {
+            dims[i] = dims_new[i];
+        }
+        dim_len = dim_len_new;
+    } else {
+        throw std::invalid_argument("Invalid dimension size for broadcasting!");
+    }
+}
+
 void Matrix::reshape(int* dims_new, int dim_len_new) {
     //Dims_new must multiply into same size as dims_old
 
@@ -335,30 +401,6 @@ void Matrix::reshape(int* dims_new, int dim_len_new) {
         dim_len = dim_len_new;
     } else {    
         throw std::invalid_argument("Invalid dimension size for reshape!");
-    }
-}
-
-void Matrix::broadcast(int* dims_new, int dim_len_new) {
-    //Dim_len_new must always be >= dim_len
-
-    //Broadcast -> Given two sets of dimensions, will add extra dimensions to the shorter one such that the numbers are extended to match dimensions
-    //Useful for a BLAS library when multiplying matrices of unequal dimension
-    //Data not modified, only stride and dimension array modified
-    if (dim_len_new >= dim_len) {
-        int* dists_new = get_broadcasted_strides(dims_new, dim_len_new);
-        free(dists);
-        free(dims);
-        dists = dists_new;
-        dims = (int*) malloc(dim_len_new * sizeof(int));
-        if (dims == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
-        for (size_t i = 0; i < dim_len_new; ++i) {
-            dims[i] = dims_new[i];
-        }
-        dim_len = dim_len_new;
-    } else {
-        throw std::invalid_argument("Invalid dimension size for broadcasting!");
     }
 }
 
@@ -977,7 +1019,7 @@ Matrix Matrix::matmul(Matrix &other) {
 }   
 
 Matrix Matrix::clone() const {
-    return Matrix(dims, dim_len, data, true);
+    return Matrix(dims, dim_len, data, data_len, dists);
 }
 
 Matrix Matrix::scmul(float s) {
@@ -1201,17 +1243,25 @@ void Matrix::apply_inplace(float (*func)(float)) {
 }
 
 void Matrix::transpose_shallow(int* axes) {
+
     int* dists_c = (int*) malloc(dim_len * sizeof(int));
     if (dists_c == nullptr) {
         throw std::invalid_argument("Memory allocation error");
     }
+
+    int* dims_c = (int*) malloc(dim_len * sizeof(int));
+    if (dims_c == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
     for (size_t i = 0; i < dim_len; ++i) {
         dists_c[i] = dists[axes[i]];
+        dims_c[i] = dims[axes[i]];
     }
-    for (size_t i = 0; i < dim_len; ++i) {
-        dists[i] = dists_c[i];
-    }
-    free(dists_c);
+    free(dists);
+    free(dims);
+    dists = dists_c;
+    dims = dims_c;
 }
 
 float Matrix::get(const initializer_list<int> &pos) const {

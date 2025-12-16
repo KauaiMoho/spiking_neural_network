@@ -18,6 +18,7 @@ private:
     bool copy;
     
     Matrix(int* dims_n, int dim_len, float* data_n, bool copy);//Create a new matrix with given data, can choose to copy or take ownership
+    Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists); //Strictly for direct cloning, use incase view has changed (reshape/broadcast).
     int convert_idx(initializer_list<int> pos) const;//Convert given index to 1d flattend index using strides
 
     void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k);
