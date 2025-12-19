@@ -3,7 +3,7 @@
 //Default do not use CUDA
 bool Matrix::cuda = false;
 
-Matrix::Matrix(int* dims_n, int dim_len, float* data_n) : dim_len(dim_len) {
+Matrix::Matrix(const int* dims_n, int dim_len, const float* data_n) : dim_len(dim_len) {
     if (dim_len == 0) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
@@ -158,7 +158,7 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
     }
 }
 
-Matrix::Matrix(int* dims_n, int dim_len, float val) : dim_len(dim_len) {
+Matrix::Matrix(const int* dims_n, int dim_len, float val) : dim_len(dim_len) {
 
     if (dim_len == 0) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
@@ -204,7 +204,7 @@ Matrix::Matrix(int* dims_n, int dim_len, float val) : dim_len(dim_len) {
     }
 }
 
-Matrix::Matrix(int* dims_n, int dim_len, unsigned int random_seed) : dim_len(dim_len) {
+Matrix::Matrix(const int* dims_n, int dim_len, unsigned int random_seed) : dim_len(dim_len) {
 
     if (dim_len == 0) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
@@ -258,7 +258,6 @@ Matrix::Matrix(int* dims_n, int dim_len, unsigned int random_seed) : dim_len(dim
     }
 }
 
-
 Matrix::~Matrix() {
     //NOTE, CANNOT USE = operator: Matrix A = B
     //TODO: check
@@ -289,7 +288,7 @@ void Matrix::print_array(const int* arr, int len, int max) const {
     std::cout << "\n";
 }
 
-int Matrix::convert_idx(std::initializer_list<int> pos) const {
+int Matrix::convert_idx(const std::initializer_list<int>& pos) const {
 
     //Converts between regular indexing (nd) and stride position (1d)
     int idx = 0;
@@ -305,36 +304,37 @@ int Matrix::convert_idx(std::initializer_list<int> pos) const {
     return idx;
 }
 
-int* Matrix::get_broadcasted_strides(int* dims_new, int dim_len_new) const {
-    //Dim_len_new will always be >= dim_len
-
+int* Matrix::get_broadcasted_strides(const int* dims_new, int dim_len_new) const {
     //Gets the new strides (row major, flattened) for a given broadcast
-    int* dists_new = (int*) malloc(dim_len_new * sizeof(int));
-    int diff = dim_len_new - dim_len;
-    if (dists_new == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    if (dim_len_new >= dim_len) {
+        int* dists_new = (int*) malloc(dim_len_new * sizeof(int));
+        int diff = dim_len_new - dim_len;
+        if (dists_new == nullptr) {
+            throw std::invalid_argument("Memory allocation error");
+        }
 
-    for (int i = dim_len_new - 1; i >= 0 ; i--) {
-        int i_old = i - diff;
-        if (i_old < 0) { 
-            dists_new[i] = 0;
-        } else {
-            if (dims[i_old] == dims_new[i]) {
-                dists_new[i] = dists[i_old];
-            } else if (dims[i_old] == 1) {
+        for (int i = dim_len_new - 1; i >= 0 ; i--) {
+            int i_old = i - diff;
+            if (i_old < 0) { 
                 dists_new[i] = 0;
             } else {
-                free(dists_new);
-                throw std::invalid_argument("Incompatible dimensions for broadcasting!");
+                if (dims[i_old] == dims_new[i]) {
+                    dists_new[i] = dists[i_old];
+                } else if (dims[i_old] == 1) {
+                    dists_new[i] = 0;
+                } else {
+                    free(dists_new);
+                    throw std::invalid_argument("Incompatible dimensions for broadcasting!");
+                }
             }
         }
+        return dists_new;
+    } else {
+        throw std::invalid_argument("Invalid dimension size for broadcasting!");
     }
-
-    return dists_new;
 }
 
-void Matrix::broadcast(int* dims_new, int dim_len_new) {
+void Matrix::broadcast(const int* dims_new, int dim_len_new) {
     //Dim_len_new must always be >= dim_len
 
     //Broadcast -> Given two sets of dimensions, will add extra dimensions to the shorter one such that the numbers are extended to match dimensions
@@ -358,7 +358,7 @@ void Matrix::broadcast(int* dims_new, int dim_len_new) {
     }
 }
 
-void Matrix::reshape(int* dims_new, int dim_len_new) {
+void Matrix::reshape(const int* dims_new, int dim_len_new) {
     //Dims_new must multiply into same size as dims_old
 
     //Will change between any dimensions as long as both dimensions have the same total size
@@ -396,7 +396,7 @@ void Matrix::reshape(int* dims_new, int dim_len_new) {
     }
 }
 
-void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const int* other_dists, int n, int m, int k, int z) {
+void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const {
 
     //Use loop order to optimize L Cache loading.
     //Use sysctl -a | grep cache to check Apple Silicon Cache Size
@@ -454,18 +454,18 @@ void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const 
                         int jE =  std::min(jc+tile, m);
 
                         //Broadcasted strides will have a dimension of 0 in strides, allowing for still efficient cache usage
-                        const float* ptrA = &A[z*dists[0] + i*dists[1] + jc*dists[2]];
+                        const float* ptrA = &A[z*this_dists[0] + i*this_dists[1] + jc*this_dists[2]];
                         float* ptrB = &B_t[l*m + jc];
                         for (size_t j = jc; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
-                            ptrA += 4 * dists[2];
+                            ptrA += 4 * this_dists[2];
                             ptrB += 4;
                             acc = vaddq_f32(acc, vmulq_f32(a, b));
                         }
                         for (size_t j = 0; j < (jE%4); ++j) {
                             sum += (*ptrA) * (*ptrB);
-                            ptrA += dists[2];
+                            ptrA += this_dists[2];
                             ptrB += 1;
                         }
                     }
@@ -478,7 +478,7 @@ void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const 
     free(B_t);
 }
 
-void Matrix::matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) {
+void Matrix::matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) const {
     //TODO: Uncomment after compiling with nvcc
     //::matmul_cuda(A, B, C, n, m, k);
 }
@@ -490,7 +490,7 @@ void Matrix::matmul_cuda(const float* A, const float* B, float* C, int n, int m,
 //Stride B = k
 //Stride C = k
 //Assume matrix dimensions near square for cache optimization simplicity.
-void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k) {
+void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k) const {
 
     //Use loop order to optimize L Cache loading.
     //Use sysctl -a | grep cache to check Apple Silicon Cache Size
@@ -566,7 +566,7 @@ void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, 
     free(B_t);
 }
 
-void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const int* dists_new) {
+void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const int* dists_new) const {
     
     size_t tile = 16;
 
@@ -684,7 +684,7 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
     }
 }
 
-Matrix Matrix::matmul(Matrix &other) {
+Matrix Matrix::matmul(const Matrix& other) const {
 
     int tile = 16;
     
@@ -929,38 +929,33 @@ Matrix Matrix::matmul(Matrix &other) {
                     }
                 }
             }
+
+            //We MUST allocate this on the heap due to how the destructor for this class works - free will fail.
+            // - Could add a boolean flag to notify destructor if stack-allocated, but increased complexity/less readable
             int* bmm_shape = (int*) malloc(3 * sizeof(int));
+
             if (bmm_shape == nullptr) {
                 throw std::invalid_argument("Memory allocation error");
             }
+
             bmm_shape[0] = 1;
+            bmm_shape[1] = dims[dim_len - 2];
+            bmm_shape[2] = other.get_dims_index(other_dim_len - 1);
             for (size_t i = 0; i < broadcast_dim_len - 2; ++i) {
                 bmm_shape[0] *= broadcast_dims[i];
             }
-
-            //Save old dimensions, do not free
-            int dim_len_this = dim_len;
-            int dim_len_other = other.get_dim_len();
-            int* dims_clone_this = get_dims_clone();
-            int* dims_clone_other = other.get_dims_clone();
-            int* dists_clone_this = get_dists_clone();
-            int* dists_clone_other = other.get_dists_clone();
             
-            //Broadcast and reshape
+            //Broadcast: preserve last two dimensions for matmul.
             broadcast_dims[broadcast_dim_len - 2] = dims[dim_len - 2];
             broadcast_dims[broadcast_dim_len - 1] = dims[dim_len - 1];
-            broadcast(broadcast_dims, broadcast_dim_len);
+            int* this_dists = get_broadcasted_strides(broadcast_dims, broadcast_dim_len);
 
             broadcast_dims[broadcast_dim_len - 2] = other.get_dims_index(other_dim_len - 2);
             broadcast_dims[broadcast_dim_len - 1] = other.get_dims_index(other_dim_len - 1);
-            other.broadcast(broadcast_dims, broadcast_dim_len);
+            int* other_dists = other.get_broadcasted_strides(broadcast_dims, broadcast_dim_len);
 
             free(broadcast_dims);
-            
-            bmm_shape[1] = dims[1];
-            bmm_shape[2] = other.get_dims_index(broadcast_dim_len - 1);
 
-            //matmul
             int n_threads = std::thread::hardware_concurrency();
 
             //Avoid malloc to call constructor
@@ -982,7 +977,7 @@ Matrix Matrix::matmul(Matrix &other) {
             for (size_t t = 0; t < n_threads; ++t) {
                 threads[t] = std::thread([&, t]() {
                     for (size_t i = t; i < bmm_shape[0]; i += n_threads) {
-                        matmul_cpu_batched(data, other.get_data(), data_out, other.get_dists(), 
+                        matmul_cpu_batched(data, other.get_data(), data_out, this_dists, other_dists, 
                                 dims[dim_len - 2], dims[dim_len - 1], bmm_shape[2], i);
                     }
                 });
@@ -990,19 +985,15 @@ Matrix Matrix::matmul(Matrix &other) {
             for (size_t i = 0; i < n_threads; ++i) {
                 threads[i].join();
             }
-
-            Matrix ret = Matrix(bmm_shape, 3, data_out, false);
-
+            
             delete[] threads;
 
-            dim_len = dim_len_this;
-            dims = dims_clone_this;
-            dists = dists_clone_this;
-            other.set_dim_len(dim_len_other);
-            other.set_dims(dims_clone_other);
-            other.set_dists(dists_clone_other);
+            free(this_dists);
+            free(other_dists);
 
+            Matrix ret = Matrix(bmm_shape, 3, data_out, false);
             return ret;
+            
         } else {
             throw std::invalid_argument("Invalid batched matrix-matrix product dimensions!");
         }
@@ -1041,7 +1032,6 @@ Matrix Matrix::scmul(float s) {
     Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
     return ret;
 }
-
 
 Matrix Matrix::add(const Matrix& other) {
 
@@ -1256,7 +1246,7 @@ void Matrix::transpose_shallow(int* axes) {
     dims = dims_c;
 }
 
-float Matrix::get(const std::initializer_list<int> &pos) const {
+float Matrix::get(const std::initializer_list<int>& pos) const {
     return data[convert_idx(pos)];
 }
 
@@ -1267,7 +1257,7 @@ float Matrix::get_index(int i) const {
     return data[i];
 }
 
-void Matrix::set(const std::initializer_list<int> &pos, float val) {
+void Matrix::set(const std::initializer_list<int>& pos, float val) {
     data[convert_idx(pos)] = val;
 }
 
@@ -1349,7 +1339,6 @@ void Matrix::print_dims(int max) const {
 void Matrix::print_dists(int max) const {
     print_array(dists, dim_len, max);
 }
-
 
 //Get/Set CUDA Usage
 void Matrix::set_CUDA(bool c) {

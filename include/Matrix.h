@@ -23,17 +23,17 @@ private:
     
     Matrix(int* dims_n, int dim_len, float* data_n, bool copy);//Create a new matrix with given data, can choose to copy or take ownership
     Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists); //Strictly for direct cloning, use incase view has changed (reshape/broadcast).
-    int convert_idx(std::initializer_list<int> pos) const;//Convert given index to 1d flattend index using strides
+    int convert_idx(const std::initializer_list<int>& pos) const;//Convert given index to 1d flattend index using strides
 
-    void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k);
-    void matmul_cpu_batched(const float* A, const float* B, float* C, const int* other_dists, int n, int m, int k, int z);
-    void matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k);
+    void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) const;
+    void matmul_cpu_batched(const float* A, const float* B, float* C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const;
+    void matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k) const;
 
     //Will transpose a matrix physically using simd operations, used internally for efficient matmul and public facing transpose2d.
-    void simd_transpose(const float* A, float* B, int n, int m, int z = 0, const int* dists_new = nullptr);
+    void simd_transpose(const float* A, float* B, int n, int m, int z = 0, const int* dists_new = nullptr) const;
     int* get_dims_clone() const;
     int* get_dists_clone() const;
-    int* get_broadcasted_strides(int* dims_new, int dim_len_new) const;//Get the broadcasted strides for this given a set of dimensions
+    int* get_broadcasted_strides(const int* dims_new, int dim_len_new) const;//Get the broadcasted strides for this given a set of dimensions
     void set_dim_len(int dim_len_n); // UNCHECKED
     void set_dims(int* dims_n); // UNCHECKED
     void set_dists(int* dists_n); // UNCHECKED
@@ -45,11 +45,11 @@ private:
     
 public:
     
-    Matrix(int* dims_n, int dim_len, float* data_n);//Create a new matrix with a given data array (flattened, row major), will copy data
-    Matrix(int* dims_n, int dim_len, float val);//Create a new matrix filled with a given float
-    Matrix(int* dims_n, int dim_len, unsigned int random_seed = 0);//Create a new matrix filled with random floats between [0-1), can set seed
+    Matrix(const int* dims_n, int dim_len, const float* data_n);//Create a new matrix with a given data array (flattened, row major), will copy data
+    Matrix(const int* dims_n, int dim_len, float val);//Create a new matrix filled with a given float
+    Matrix(const int* dims_n, int dim_len, unsigned int random_seed = 0);//Create a new matrix filled with random floats between [0-1), can set seed
     ~Matrix();
-    Matrix matmul(Matrix &other);//Matmul, extensive docs in source and usage guides. (does not affect original)
+    Matrix matmul(const Matrix &other) const;//Matmul, extensive docs in source and usage guides. (does not affect original)
     Matrix clone() const;//Return a deep copy clone of this object (does not affect original)
     Matrix scmul(float s);//Will multiply matrix by a scalar,  and return new matrix. (does not affect original)
     Matrix add(const Matrix &other);// Will add two matrices,  and return new matrix. (does not affect original)
@@ -61,12 +61,12 @@ public:
     void subtract_inplace(const Matrix &other); // Will subtract this - other inplace.
     void apply_inplace(float (*func)(float)); // Will apply a given function inplace.
     void transpose_shallow(int* axes); // Will only transpose semantically, will not transpose the data.
-    float get(const std::initializer_list<int> &pos) const;//Get a value using format {x, y, z, ...}
+    float get(const std::initializer_list<int>& pos) const;//Get a value using format {x, y, z, ...}
     float get_index(int i) const;//Get a value using a flattened index (mostly internal use)
-    void set(const std::initializer_list<int> &pos, float val);//Set a value using format {x, y, z, ...}
+    void set(const std::initializer_list<int>& pos, float val);//Set a value using format {x, y, z, ...}
     void set_index(int i, float val);//Set a value using a flattened index (mostly internal use)
-    void broadcast(int* dim, int dim_len);//Broadcast dimensions, more info in source.
-    void reshape(int* dims_new, int dim_len_new);//Reshape dimensions, more info in source.
+    void broadcast(const int* dim, int dim_len);//Broadcast dimensions, more info in source.
+    void reshape(const int* dims_new, int dim_len_new);//Reshape dimensions, more info in source.
     int get_dims_index(int i) const;//Get dims using an flattened index
     int get_dim_len() const;//Get length of all dimensions (returns 3 for 3d)
     void print_dims(int max = 50) const;//Print dims
