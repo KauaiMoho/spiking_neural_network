@@ -19,7 +19,7 @@ private:
     int data_len;
     size_t aligned_data_len;
     static bool cuda;
-    bool copy;
+    static int tile;
     
     Matrix(int* dims_n, int dim_len, float* data_n, bool copy);//Create a new matrix with given data, can choose to copy or take ownership
     Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists); //Strictly for direct cloning, use incase view has changed (reshape/broadcast).
@@ -39,6 +39,7 @@ private:
     void set_dists(int* dists_n); // UNCHECKED
     int* get_dims() const;
     int* get_dists() const;
+    float* get_data() const;
 
     void print_array(const float* arr, int len, int max) const; // Print a given float array
     void print_array(const int* arr, int len, int max) const; // Print a given int array
@@ -53,12 +54,10 @@ public:
     Matrix clone() const;//Return a deep copy clone of this object (does not affect original)
     Matrix scmul(float s);//Will multiply matrix by a scalar,  and return new matrix. (does not affect original)
     Matrix add(const Matrix &other);// Will add two matrices,  and return new matrix. (does not affect original)
-    Matrix subtract(const Matrix &other);//Will subtract this - other , and return new matrix. (does not affect original)
     Matrix apply(float (*func)(float));//Will apply a given function, and return new matrix. (does not affect original)
     Matrix transpose2d();//Will transpose data physically leveraging simd, and return new tranposed matrix. (does not affect original)
     void scmul_inplace(float s);//Will multiply matrix by a scalar inplace.
     void add_inplace(const Matrix &other);// Will add two matrices inplace.
-    void subtract_inplace(const Matrix &other); // Will subtract this - other inplace.
     void apply_inplace(float (*func)(float)); // Will apply a given function inplace.
     void transpose_shallow(int* axes); // Will only transpose semantically, will not transpose the data.
     float get(const std::initializer_list<int>& pos) const;//Get a value using format {x, y, z, ...}
@@ -74,9 +73,9 @@ public:
     void print_data(int max = 50) const;//Print data values up to a given max, default 50
     static void set_CUDA(bool c);//Set CUDA usage
     static bool get_CUDA();//Get CUDA usage
+    static void set_tile(int t);
+    static int get_tile();
 
-    float* get_data() const;
-    
 };
 
 extern "C" void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k);

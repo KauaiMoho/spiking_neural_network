@@ -2,12 +2,12 @@
 
 //Default do not use CUDA
 bool Matrix::cuda = false;
+int Matrix::tile = 16;
 
 Matrix::Matrix(const int* dims_n, int dim_len, const float* data_n) : dim_len(dim_len) {
     if (dim_len == 0) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
-    copy = true;
 
     dists = (int*) malloc(dim_len * sizeof(int));
 
@@ -54,8 +54,6 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists_
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
 
-    copy = true;
-
     //Will copy dists as well incase of broadcasting
     dists = (int*) malloc(dim_len * sizeof(int));
 
@@ -91,7 +89,7 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists_
     }
 }
 
-Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim_len), copy(copy) {
+Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim_len) {
     if (dim_len == 0) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
@@ -163,7 +161,6 @@ Matrix::Matrix(const int* dims_n, int dim_len, float val) : dim_len(dim_len) {
     if (dim_len == 0) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
-    copy = true;
 
     dists = (int*) malloc(dim_len * sizeof(int));
 
@@ -209,7 +206,6 @@ Matrix::Matrix(const int* dims_n, int dim_len, unsigned int random_seed) : dim_l
     if (dim_len == 0) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
-    copy = true;
 
     if (random_seed == 0) {
         std::random_device rd;
@@ -685,8 +681,6 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
 }
 
 Matrix Matrix::matmul(const Matrix& other) const {
-
-    int tile = 16;
     
     if (other.get_dim_len() == 1 && dim_len == 1) {
         //Dimension 1 x 1 = Dot product
@@ -993,7 +987,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
 
             Matrix ret = Matrix(bmm_shape, 3, data_out, false);
             return ret;
-            
+
         } else {
             throw std::invalid_argument("Invalid batched matrix-matrix product dimensions!");
         }
@@ -1037,7 +1031,7 @@ Matrix Matrix::add(const Matrix& other) {
 
     for (size_t i = 0; i < dim_len; ++i){
         if (dims[i] != other.get_dims_index(i)) {
-            throw std::invalid_argument("Invalid matrix dimensions!");
+            throw std::invalid_argument("Invalid matrix-matrix add dimensions!");
         }
     }
 
@@ -1064,43 +1058,6 @@ Matrix Matrix::add(const Matrix& other) {
 
     for (size_t i = 0; i < data_len % 4; ++i) {
         outPtr[i] = tPtr[i] + oPtr[i];
-    }
-
-    Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
-    return ret;
-}
-
-Matrix Matrix::subtract(const Matrix& other) {
-
-    for (size_t i = 0; i < dim_len; ++i){
-        if (dims[i] != other.get_dims_index(i)) {
-            throw std::invalid_argument("Invalid matrix dimensions!");
-        }
-    }
-
-    float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-
-    if (data_out == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
-    
-    const float* oPtr = other.get_data();
-    float* tPtr = data;
-    float* outPtr = data_out;
-
-    for (size_t i = 0; i + 3 < data_len; i += 4) {
-
-        float32x4_t af = vld1q_f32(oPtr);
-        float32x4_t tf = vld1q_f32(tPtr);
-        float32x4_t sub = vsubq_f32(tf, af);
-        vst1q_f32(outPtr, sub);
-        oPtr += 4;
-        tPtr += 4;
-        outPtr += 4;
-    }
-
-    for (size_t i = 0; i < data_len % 4; ++i) {
-        outPtr[i] = tPtr[i] - oPtr[i];
     }
 
     Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
@@ -1190,31 +1147,6 @@ void Matrix::add_inplace(const Matrix& other) {
 
     for (size_t i = 0; i < data_len % 4; ++i) {
         tPtr[i] = tPtr[i] + oPtr[i];
-    }
-}
-
-void Matrix::subtract_inplace(const Matrix& other) {
-    for (size_t i = 0; i < dim_len; ++i){
-        if (dims[i] != other.get_dims_index(i)) {
-            throw std::invalid_argument("Invalid matrix dimensions!");
-        }
-    }
-    
-    const float* oPtr = other.get_data();
-    float* tPtr = data;
-
-    for (size_t i = 0; i + 3 < data_len; i += 4) {
-
-        float32x4_t af = vld1q_f32(oPtr);
-        float32x4_t tf = vld1q_f32(tPtr);
-        float32x4_t sub = vsubq_f32(tf, af);
-        vst1q_f32(tPtr, sub);
-        oPtr += 4;
-        tPtr += 4;
-    }
-
-    for (size_t i = 0; i < data_len % 4; ++i) {
-        tPtr[i] = tPtr[i] - oPtr[i];
     }
 }
 
@@ -1347,4 +1279,12 @@ void Matrix::set_CUDA(bool c) {
 
 bool Matrix::get_CUDA() {
     return cuda;
+}
+
+void Matrix::set_tile(int t) {
+    tile = t;
+}
+
+int Matrix::get_tile() {
+    return tile;
 }
