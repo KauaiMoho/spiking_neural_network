@@ -1,7 +1,11 @@
 #ifndef MATRIX_H
 #define MATRIX_H
-#include <initializer_list>
-using std::initializer_list;
+#include <stdexcept>
+#include <iostream>
+#include <thread>
+#include <arm_neon.h>
+#include <random>
+#include <algorithm>
 
 class Matrix {
 
@@ -19,7 +23,7 @@ private:
     
     Matrix(int* dims_n, int dim_len, float* data_n, bool copy);//Create a new matrix with given data, can choose to copy or take ownership
     Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists); //Strictly for direct cloning, use incase view has changed (reshape/broadcast).
-    int convert_idx(initializer_list<int> pos) const;//Convert given index to 1d flattend index using strides
+    int convert_idx(std::initializer_list<int> pos) const;//Convert given index to 1d flattend index using strides
 
     void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k);
     void matmul_cpu_batched(const float* A, const float* B, float* C, const int* other_dists, int n, int m, int k, int z);
@@ -57,9 +61,9 @@ public:
     void subtract_inplace(const Matrix &other); // Will subtract this - other inplace.
     void apply_inplace(float (*func)(float)); // Will apply a given function inplace.
     void transpose_shallow(int* axes); // Will only transpose semantically, will not transpose the data.
-    float get(const initializer_list<int> &pos) const;//Get a value using format {x, y, z, ...}
+    float get(const std::initializer_list<int> &pos) const;//Get a value using format {x, y, z, ...}
     float get_index(int i) const;//Get a value using a flattened index (mostly internal use)
-    void set(const initializer_list<int> &pos, float val);//Set a value using format {x, y, z, ...}
+    void set(const std::initializer_list<int> &pos, float val);//Set a value using format {x, y, z, ...}
     void set_index(int i, float val);//Set a value using a flattened index (mostly internal use)
     void broadcast(int* dim, int dim_len);//Broadcast dimensions, more info in source.
     void reshape(int* dims_new, int dim_len_new);//Reshape dimensions, more info in source.

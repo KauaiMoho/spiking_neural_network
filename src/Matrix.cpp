@@ -1,11 +1,4 @@
 #include "Matrix.h"
-using std::initializer_list;
-#include <stdexcept>
-#include <iostream>
-#include <thread>
-#include <arm_neon.h>
-#include <random>
-#include <algorithm>
 
 //Default do not use CUDA
 bool Matrix::cuda = false;
@@ -268,10 +261,9 @@ Matrix::Matrix(int* dims_n, int dim_len, unsigned int random_seed) : dim_len(dim
 
 Matrix::~Matrix() {
     //NOTE, CANNOT USE = operator: Matrix A = B
-    if (copy) {
-        free(data);
-        free(dims);
-    }
+    //TODO: check
+    free(data);
+    free(dims);
     free(dists);
 }
 
@@ -297,7 +289,7 @@ void Matrix::print_array(const int* arr, int len, int max) const {
     std::cout << "\n";
 }
 
-int Matrix::convert_idx(initializer_list<int> pos) const {
+int Matrix::convert_idx(std::initializer_list<int> pos) const {
 
     //Converts between regular indexing (nd) and stride position (1d)
     int idx = 0;
@@ -505,7 +497,7 @@ void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, 
 
     constexpr size_t L1_bytes = 64 * 1024;
     constexpr size_t L2_bytes = 4 * 1024 * 1024;
-    constexpr int cache_line_floats = 32;
+    constexpr int cache_line_floats = 16;
     size_t matrix_size_floats = (static_cast<size_t>(n)*m) + (static_cast<size_t>(m)*k) + (static_cast<size_t>(n)*k);
 
     //Choose between L1 and L2 cache based on matrix size
@@ -1264,7 +1256,7 @@ void Matrix::transpose_shallow(int* axes) {
     dims = dims_c;
 }
 
-float Matrix::get(const initializer_list<int> &pos) const {
+float Matrix::get(const std::initializer_list<int> &pos) const {
     return data[convert_idx(pos)];
 }
 
@@ -1275,7 +1267,7 @@ float Matrix::get_index(int i) const {
     return data[i];
 }
 
-void Matrix::set(const initializer_list<int> &pos, float val) {
+void Matrix::set(const std::initializer_list<int> &pos, float val) {
     data[convert_idx(pos)] = val;
 }
 
