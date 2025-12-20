@@ -1027,13 +1027,45 @@ Matrix Matrix::scmul(float s) const {
     return ret;
 }
 
+//Will prioritize row-col addition over col-row addition
 Matrix Matrix::add(const Matrix& other) const {
 
     //Matrix - Vector add - specific, quicker kernel for ANN
     //Could generalize in future by doing broadcasting, but would be largely the same as matmul
     if (other.get_dim_len() == 1 && dim_len == 2) {
 
-        if (other.get_dims_index(0) == dims[0]) { //Add col to rows
+        if (other.get_dims_index(0) == dims[1]) { //Add row to cols
+
+            float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+            if (data_out == nullptr) {
+                throw std::invalid_argument("Memory allocation error");
+            }
+
+            float* tPtr = data;
+            float* outPtr = data_out;
+            float* oPtr = other.get_data();
+
+            //Dont do tiling to match rest of add, can do in future.
+            for (size_t i = 0; i < dims[0]; ++i){
+                for (size_t j = 0; j + 3 < dims[1]; j += 4) {
+                    float32x4_t tf = vld1q_f32(tPtr);
+                    float32x4_t af = vld1q_f32(&oPtr[j]);
+                    float32x4_t add = vaddq_f32(af, tf);
+                    vst1q_f32(outPtr, add);
+                    tPtr += 4;
+                    outPtr += 4;
+                }
+                for (size_t j = 0; j < (dims[1]%4); ++j) {
+                    (*outPtr) = (*tPtr) + oPtr[j];
+                    outPtr += 1;
+                    tPtr += 1;
+                }
+            }
+
+            Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+            return ret;
+
+        } else if (other.get_dims_index(0) == dims[0]) { //Add col to rows
 
             float* data_out = (float*) aligned_alloc(16, aligned_data_len);
             if (data_out == nullptr) {
@@ -1061,37 +1093,6 @@ Matrix Matrix::add(const Matrix& other) const {
                     outPtr += 1;
                 }
                 oPtr += 1;   
-            }
-
-            Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
-            return ret;
-
-        } else if (other.get_dims_index(0) == dims[1]) { //Add row to cols
-
-            float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-            if (data_out == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
-
-            float* tPtr = data;
-            float* outPtr = data_out;
-            float* oPtr = other.get_data();
-
-            //Dont do tiling to match rest of add, can do in future.
-            for (size_t i = 0; i < dims[0]; ++i){
-                for (size_t j = 0; j + 3 < dims[1]; j += 4) {
-                    float32x4_t tf = vld1q_f32(tPtr);
-                    float32x4_t af = vld1q_f32(&oPtr[j]);
-                    float32x4_t add = vaddq_f32(af, tf);
-                    vst1q_f32(outPtr, add);
-                    tPtr += 4;
-                    outPtr += 4;
-                }
-                for (size_t j = 0; j < (dims[1]%4); ++j) {
-                    (*outPtr) = (*tPtr) + oPtr[j];
-                    outPtr += 1;
-                    tPtr += 1;
-                }
             }
 
             Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
@@ -1200,11 +1201,32 @@ void Matrix::scmul_inplace(float s) {
     }
 }
 
+//Will prioritize row-col addition over col-row addition
 void Matrix::add_inplace(const Matrix& other) {
 
-        if (other.get_dim_len() == 1 && dim_len == 2) {
+    if (other.get_dim_len() == 1 && dim_len == 2) {
 
-        if (other.get_dims_index(0) == dims[0]) { //Add col to rows
+        if (other.get_dims_index(0) == dims[1]) { //Add row to cols
+
+            float* tPtr = data;
+            float* oPtr = other.get_data();
+
+            //Dont do tiling to match rest of add, can do in future.
+            for (size_t i = 0; i < dims[0]; ++i){
+                for (size_t j = 0; j + 3 < dims[1]; j += 4) {
+                    float32x4_t tf = vld1q_f32(tPtr);
+                    float32x4_t af = vld1q_f32(&oPtr[j]);
+                    float32x4_t add = vaddq_f32(af, tf);
+                    vst1q_f32(tPtr, add);
+                    tPtr += 4;
+                }
+                for (size_t j = 0; j < (dims[1]%4); ++j) {
+                    (*tPtr) = (*tPtr) + oPtr[j];
+                    tPtr += 1;
+                }
+            }
+
+        } else if (other.get_dims_index(0) == dims[0]) { //Add col to rows
 
             float* tPtr = data;
             float* oPtr = other.get_data();
@@ -1224,26 +1246,6 @@ void Matrix::add_inplace(const Matrix& other) {
                     tPtr += 1;
                 }
                 oPtr += 1;   
-            }
-
-        } else if (other.get_dims_index(0) == dims[1]) { //Add row to cols
-
-            float* tPtr = data;
-            float* oPtr = other.get_data();
-
-            //Dont do tiling to match rest of add, can do in future.
-            for (size_t i = 0; i < dims[0]; ++i){
-                for (size_t j = 0; j + 3 < dims[1]; j += 4) {
-                    float32x4_t tf = vld1q_f32(tPtr);
-                    float32x4_t af = vld1q_f32(&oPtr[j]);
-                    float32x4_t add = vaddq_f32(af, tf);
-                    vst1q_f32(tPtr, add);
-                    tPtr += 4;
-                }
-                for (size_t j = 0; j < (dims[1]%4); ++j) {
-                    (*tPtr) = (*tPtr) + oPtr[j];
-                    tPtr += 1;
-                }
             }
 
         } else {

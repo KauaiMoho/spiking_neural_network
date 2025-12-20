@@ -15,9 +15,9 @@ ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n) 
     for (size_t i = 1; i < layer_sizes.size(); ++i) {
         int curr_size = layer_sizes[i];
         int dims_weights[] = {prev_size, curr_size};
-        int dims_biases[] = {1, curr_size};
+        int dims_biases[] = {curr_size};
         weights.push_back(Matrix(dims_weights, 2));
-        biases.push_back(Matrix(dims_biases, 2, (float)0));
+        biases.push_back(Matrix(dims_biases, 1, (float)0));
         prev_size = curr_size;
     }
 }
