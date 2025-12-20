@@ -4,3 +4,4 @@ program
 *.o
 matrix_tests
 external/
+data/
