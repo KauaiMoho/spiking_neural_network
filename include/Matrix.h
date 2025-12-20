@@ -52,10 +52,10 @@ public:
     ~Matrix();
     Matrix matmul(const Matrix &other) const;//Matmul, extensive docs in source and usage guides. (does not affect original)
     Matrix clone() const;//Return a deep copy clone of this object (does not affect original)
-    Matrix scmul(float s);//Will multiply matrix by a scalar,  and return new matrix. (does not affect original)
-    Matrix add(const Matrix &other);// Will add two matrices,  and return new matrix. (does not affect original)
-    Matrix apply(float (*func)(float));//Will apply a given function, and return new matrix. (does not affect original)
-    Matrix transpose2d();//Will transpose data physically leveraging simd, and return new tranposed matrix. (does not affect original)
+    Matrix scmul(float s) const;//Will multiply matrix by a scalar,  and return new matrix. (does not affect original)
+    Matrix add(const Matrix &other) const;// Will add two matrices,  and return new matrix. (does not affect original)
+    Matrix apply(float (*func)(float)) const;//Will apply a given function, and return new matrix. (does not affect original)
+    Matrix transpose2d() const;//Will transpose data physically leveraging simd, and return new tranposed matrix. (does not affect original)
     void scmul_inplace(float s);//Will multiply matrix by a scalar inplace.
     void add_inplace(const Matrix &other);// Will add two matrices inplace.
     void apply_inplace(float (*func)(float)); // Will apply a given function inplace.
