@@ -330,68 +330,6 @@ int* Matrix::get_broadcasted_strides(const int* dims_new, int dim_len_new) const
     }
 }
 
-void Matrix::broadcast(const int* dims_new, int dim_len_new) {
-    //Dim_len_new must always be >= dim_len
-
-    //Broadcast -> Given two sets of dimensions, will add extra dimensions to the shorter one such that the numbers are extended to match dimensions
-    //Useful for a BLAS library when multiplying matrices of unequal dimension
-    //Data not modified, only stride and dimension array modified
-    if (dim_len_new >= dim_len) {
-        int* dists_new = get_broadcasted_strides(dims_new, dim_len_new);
-        free(dists);
-        free(dims);
-        dists = dists_new;
-        dims = (int*) malloc(dim_len_new * sizeof(int));
-        if (dims == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
-        for (size_t i = 0; i < dim_len_new; ++i) {
-            dims[i] = dims_new[i];
-        }
-        dim_len = dim_len_new;
-    } else {
-        throw std::invalid_argument("Invalid dimension size for broadcasting!");
-    }
-}
-
-void Matrix::reshape(const int* dims_new, int dim_len_new) {
-    //Dims_new must multiply into same size as dims_old
-
-    //Will change between any dimensions as long as both dimensions have the same total size
-    //Data not modified, only stride and dimension array modified
-    int dim_size_old = 1;
-    for (size_t i = 0; i < dim_len; ++i) {
-        dim_size_old *= dims[i];
-    }
-    int dim_size_new = 1;
-    for (size_t i = 0; i < dim_len_new; ++i) {
-        dim_size_new *= dims_new[i];
-    }
-    if (dim_size_old == dim_size_new) {
-        free(dists);
-        dists = (int*) malloc(dim_len_new * sizeof(int));
-        if (dists == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
-        free(dims);
-        dims = (int*) malloc(dim_len_new * sizeof(int));
-        if (dims == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
-        int pos = 1;
-        for (int i = dim_len_new - 1; i > 0 ; i--) {
-            dists[i] = pos;
-            dims[i] = dims_new[i];
-            pos *= dims[i];
-        }
-        dims[0] = dims_new[0];
-        dists[0] = pos;
-        dim_len = dim_len_new;
-    } else {    
-        throw std::invalid_argument("Invalid dimension size for reshape!");
-    }
-}
-
 void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const {
 
     //Use loop order to optimize L Cache loading.
@@ -795,6 +733,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
             if (other_t == nullptr) {
                 throw std::invalid_argument("Memory allocation error");
             }
+
             float* data_other = other.get_data();
             simd_transpose(data_other, other_t, m, k);
 
@@ -1028,10 +967,126 @@ Matrix Matrix::scmul(float s) const {
 }
 
 //Will prioritize row-col addition over col-row addition
+Matrix Matrix::emul(const Matrix& other) const {
+
+    //Matrix - Vector element mul - specific, quicker kernel for ANN
+    //Could generalize in future by doing broadcasting, but would be largely the same as matmul
+    //Must be 2D and row major (cannot be semantically reshaped/broadcast/transpose)
+    if (other.get_dim_len() == 1 && dim_len == 2) {
+
+        if (other.get_dims_index(0) == dims[1]) { //Add row to cols
+
+            float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+            if (data_out == nullptr) {
+                throw std::invalid_argument("Memory allocation error");
+            }
+
+            float* tPtr = data;
+            float* outPtr = data_out;
+            float* oPtr = other.get_data();
+
+            //Dont do tiling to match rest of add, can do in future.
+            for (size_t i = 0; i < dims[0]; ++i){
+                for (size_t j = 0; j + 3 < dims[1]; j += 4) {
+                    float32x4_t tf = vld1q_f32(tPtr);
+                    float32x4_t af = vld1q_f32(&oPtr[j]);
+                    float32x4_t mul = vmulq_f32(af, tf);
+                    vst1q_f32(outPtr, mul);
+                    tPtr += 4;
+                    outPtr += 4;
+                }
+                for (size_t j = 0; j < (dims[1]%4); ++j) {
+                    (*outPtr) = (*tPtr) * oPtr[j];
+                    outPtr += 1;
+                    tPtr += 1;
+                }
+            }
+
+            Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+            return ret;
+
+        } else if (other.get_dims_index(0) == dims[0]) { //Add col to rows
+
+            float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+            if (data_out == nullptr) {
+                throw std::invalid_argument("Memory allocation error");
+            }
+
+            float* tPtr = data;
+            float* outPtr = data_out;
+            float* oPtr = other.get_data();
+
+            //Dont do tiling to match rest of add, can do in future.
+            for (size_t i = 0; i < dims[0]; ++i){
+                float vec_float = *oPtr;
+                float32x4_t af = vdupq_n_f32(vec_float);
+                for (size_t j = 0; j + 3 < dims[1]; j += 4) {
+                    float32x4_t tf = vld1q_f32(tPtr);
+                    float32x4_t mul = vmulq_f32(af, tf);
+                    vst1q_f32(outPtr, mul);
+                    tPtr += 4;
+                    outPtr += 4;
+                }
+                for (size_t j = 0; j < (dims[1]%4); ++j) {
+                    (*outPtr) = (*tPtr) * vec_float;
+                    tPtr += 1;
+                    outPtr += 1;
+                }
+                oPtr += 1;   
+            }
+
+            Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+            return ret;
+
+        } else {
+            throw std::invalid_argument("Invalid matrix-vector add dimensions!");
+        }
+
+    } else { //General
+
+        for (size_t i = 0; i < dim_len; ++i){
+            if (dims[i] != other.get_dims_index(i)) {
+                throw std::invalid_argument("Invalid matrix-matrix add dimensions!");
+            }
+        }
+
+        float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+
+        if (data_out == nullptr) {
+            throw std::invalid_argument("Memory allocation error");
+        }
+        
+        const float* oPtr = other.get_data();
+        float* tPtr = data;
+        float* outPtr = data_out;
+
+        for (size_t i = 0; i + 3 < data_len; i += 4) {
+
+            float32x4_t af = vld1q_f32(oPtr);
+            float32x4_t tf = vld1q_f32(tPtr);
+            float32x4_t mul = vmulq_f32(af, tf);
+            vst1q_f32(outPtr, mul);
+            oPtr += 4;
+            tPtr += 4;
+            outPtr += 4;
+        }
+
+        for (size_t i = 0; i < data_len % 4; ++i) {
+            outPtr[i] = tPtr[i] * oPtr[i];
+        }
+
+        Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+        return ret;
+
+    }
+}
+
+//Will prioritize row-col addition over col-row addition
 Matrix Matrix::add(const Matrix& other) const {
 
     //Matrix - Vector add - specific, quicker kernel for ANN
     //Could generalize in future by doing broadcasting, but would be largely the same as matmul
+    //Must be 2D and row major (cannot be semantically reshaped/broadcast/transpose)
     if (other.get_dim_len() == 1 && dim_len == 2) {
 
         if (other.get_dims_index(0) == dims[1]) { //Add row to cols
@@ -1201,6 +1256,81 @@ void Matrix::scmul_inplace(float s) {
     }
 }
 
+void Matrix::emul_inplace(const Matrix& other) {
+
+    if (other.get_dim_len() == 1 && dim_len == 2) {
+
+        if (other.get_dims_index(0) == dims[1]) {
+
+            float* tPtr = data;
+            float* oPtr = other.get_data();
+
+            for (size_t i = 0; i < dims[0]; ++i){
+                for (size_t j = 0; j + 3 < dims[1]; j += 4) {
+                    float32x4_t tf = vld1q_f32(tPtr);
+                    float32x4_t af = vld1q_f32(&oPtr[j]);
+                    float32x4_t mul = vmulq_f32(af, tf);
+                    vst1q_f32(tPtr, mul);
+                    tPtr += 4;
+                }
+                for (size_t j = 0; j < (dims[1]%4); ++j) {
+                    (*tPtr) = (*tPtr) * oPtr[j];
+                    tPtr += 1;
+                }
+            }
+
+        } else if (other.get_dims_index(0) == dims[0]) {
+
+            float* tPtr = data;
+            float* oPtr = other.get_data();
+
+            for (int i = 0; i < dims[0]; ++i){
+                float vec_float = *oPtr;
+                float32x4_t af = vdupq_n_f32(vec_float);
+                for (size_t j = 0; j + 3 < dims[1]; j += 4) {
+                    float32x4_t tf = vld1q_f32(tPtr);
+                    float32x4_t mul = vmulq_f32(af, tf);
+                    vst1q_f32(tPtr, mul);
+                    tPtr += 4;
+                }
+                for (size_t j = 0; j < (dims[1]%4); ++j) {
+                    (*tPtr) = (*tPtr) * vec_float;
+                    tPtr += 1;
+                }
+                oPtr += 1;   
+            }
+
+        } else {
+            throw std::invalid_argument("Invalid matrix-vector add dimensions!");
+        }
+
+    } else {
+
+        for (size_t i = 0; i < dim_len; ++i){
+            if (dims[i] != other.get_dims_index(i)) {
+                throw std::invalid_argument("Invalid matrix dimensions!");
+            }
+        }
+        
+        const float* oPtr = other.get_data();
+        float* tPtr = data;
+
+        for (size_t i = 0; i + 3 < data_len; i += 4) {
+
+            float32x4_t af = vld1q_f32(oPtr);
+            float32x4_t tf = vld1q_f32(tPtr);
+            float32x4_t mul = vmulq_f32(af, tf);
+            vst1q_f32(tPtr, mul);
+            oPtr += 4;
+            tPtr += 4;
+        }
+
+        for (size_t i = 0; i < data_len % 4; ++i) {
+            tPtr[i] = tPtr[i] * oPtr[i];
+        }
+    }
+}
+
 //Will prioritize row-col addition over col-row addition
 void Matrix::add_inplace(const Matrix& other) {
 
@@ -1285,26 +1415,123 @@ void Matrix::apply_inplace(float (*func)(float)) {
     }
 }
 
-void Matrix::transpose_shallow(int* axes) {
+//Must be 2D and row major. Returns a 1D matrix with sum of all rows.
+Matrix Matrix::sum_rows() const {
+    if (dim_len == 2) {
 
-    int* dists_c = (int*) malloc(dim_len * sizeof(int));
-    if (dists_c == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
+        int* new_dims = (int*) malloc(sizeof(int));
+        if (new_dims == nullptr) {
+            throw std::invalid_argument("Memory allocation error");
+        }
+        new_dims[0] = dims[1];
+
+        size_t size = dims[1] * sizeof(float);
+
+        size_t remainder = size % 16;
+        if (remainder != 0) {
+            size += 16 - remainder;
+        }
+
+        float* data_out = (float*) aligned_alloc(16, size);
+
+        if (data_out == nullptr) {
+            throw std::invalid_argument("Memory allocation error");
+        }
+
+        float* tPtr = data;
+        float* outPtr = data_out;
+
+        for (size_t j = 0; j + 3 < dims[1]; ++j) {
+            float32x4_t acc = vdupq_n_f32(0.0f);
+            for (size_t i = 0; i < dims[0]; ++i) {
+                float32x4_t tf = vld1q_f32(tPtr + i*dims[1] + j);
+                acc = vaddq_f32(acc, tf);
+            }
+            vst1q_f32(outPtr, acc);
+            outPtr += 4;
+        } 
+
+        for (size_t j = 0; j < dims[1]%4; ++j) {
+            (*outPtr) = 0;
+            for (size_t i = 0; i < dims[0]; ++i) {
+                (*outPtr) += tPtr[i*dims[1] + j];
+            }
+            outPtr += 1;
+        }
+
+        Matrix ret = Matrix(new_dims, 1, data_out, false);
+        return ret;
+
+    } else {
+        throw std::invalid_argument("Invalid dimensions, must be 2D");
+    }
+}
+
+//Must be 2D and row major. Returns a 1D matrix with sum of all cols.
+Matrix Matrix::sum_cols() const {
+    if (dim_len == 2) {
+
+        int* new_dims = (int*) malloc(sizeof(int));
+        if (new_dims == nullptr) {
+            throw std::invalid_argument("Memory allocation error");
+        }
+        new_dims[0] = dims[0];
+
+        size_t size = dims[0] * sizeof(float);
+
+        size_t remainder = size % 16;
+        if (remainder != 0) {
+            size += 16 - remainder;
+        }
+
+        float* data_out = (float*) aligned_alloc(16, size);
+
+        if (data_out == nullptr) {
+            throw std::invalid_argument("Memory allocation error");
+        }
+
+        float* tPtr = data;
+        float* outPtr = data_out;
+
+        for (size_t i = 0; i < dims[0]; ++i) {
+            float32x4_t acc = vdupq_n_f32(0.0f);
+            for (size_t j = 0; j + 3 < dims[1]; j += 4) {
+                float32x4_t tf = vld1q_f32(tPtr);
+                acc = vaddq_f32(acc, tf);
+                tPtr += 4;
+            }
+            (*outPtr) = vaddvq_f32(acc);
+            for (size_t j = 0; j < (dims[1]%4); ++j) {
+                (*outPtr) += *(tPtr);
+                tPtr += 1;
+            }
+            outPtr += 1;
+        }
+
+        Matrix ret = Matrix(new_dims, 1, data_out, false);
+        return ret;
+
+    } else {
+        throw std::invalid_argument("Invalid dimensions, must be 2D");
+    }
+}
+
+//General - can improve in future to sum over a given axes, would require continous memory for given axes in order to use SIMD
+float Matrix::sum() const {
+    float* tPtr = data;
+    float out = 0;
+
+    for (size_t i = 0; i + 3 < data_len; i += 4) {
+        float32x4_t tf = vld1q_f32(tPtr);
+        out += vaddvq_f32(tf);
+        tPtr += 4;
     }
 
-    int* dims_c = (int*) malloc(dim_len * sizeof(int));
-    if (dims_c == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
+    for (size_t i = 0; i < data_len % 4; ++i) {
+        out += tPtr[i];
     }
 
-    for (size_t i = 0; i < dim_len; ++i) {
-        dists_c[i] = dists[axes[i]];
-        dims_c[i] = dims[axes[i]];
-    }
-    free(dists);
-    free(dims);
-    dists = dists_c;
-    dims = dims_c;
+    return out;
 }
 
 float Matrix::get(const std::initializer_list<int>& pos) const {

@@ -53,19 +53,21 @@ public:
     Matrix matmul(const Matrix &other) const;//Matmul, extensive docs in source and usage guides. (does not affect original)
     Matrix clone() const;//Return a deep copy clone of this object (does not affect original)
     Matrix scmul(float s) const;//Will multiply matrix by a scalar,  and return new matrix. (does not affect original)
+    Matrix emul(const Matrix &other) const;
     Matrix add(const Matrix &other) const;// Will add two matrices,  and return new matrix. (does not affect original)
     Matrix apply(float (*func)(float)) const;//Will apply a given function, and return new matrix. (does not affect original)
     Matrix transpose2d() const;//Will transpose data physically leveraging simd, and return new tranposed matrix. (does not affect original)
     void scmul_inplace(float s);//Will multiply matrix by a scalar inplace.
+    void emul_inplace(const Matrix &other);
     void add_inplace(const Matrix &other);// Will add two matrices inplace.
     void apply_inplace(float (*func)(float)); // Will apply a given function inplace.
-    void transpose_shallow(int* axes); // Will only transpose semantically, will not transpose the data.
+    Matrix sum_rows() const;
+    Matrix sum_cols() const;
+    float sum() const;
     float get(const std::initializer_list<int>& pos) const;//Get a value using format {x, y, z, ...}
     float get_index(int i) const;//Get a value using a flattened index (mostly internal use)
     void set(const std::initializer_list<int>& pos, float val);//Set a value using format {x, y, z, ...}
     void set_index(int i, float val);//Set a value using a flattened index (mostly internal use)
-    void broadcast(const int* dim, int dim_len);//Broadcast dimensions, more info in source.
-    void reshape(const int* dims_new, int dim_len_new);//Reshape dimensions, more info in source.
     int get_dims_index(int i) const;//Get dims using an flattened index
     int get_dim_len() const;//Get length of all dimensions (returns 3 for 3d)
     void print_dims(int max = 50) const;//Print dims

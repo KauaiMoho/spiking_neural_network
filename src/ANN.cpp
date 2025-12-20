@@ -11,6 +11,17 @@ ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n) 
         throw std::invalid_argument("Cannot have empty ANN!");
     }
 
+    //Can change in future if we want to generalize this class.
+    for (size_t i = 0; i < layer_sizes.size(); ++i) {
+        if (i != layer_sizes.size() - 1 && activations_n[i] == SOFTMAX) {
+            throw std::invalid_argument("Hidden layers cannot have SOFTMAX.");
+        }
+        if (i == layer_sizes.size() - 1 && activations_n[i] != SOFTMAX) {
+            throw std::invalid_argument("Final layer must have SOFTMAX for cross_entropy backprop.");
+        }
+    }
+    
+
     int prev_size = layer_sizes[0];
     for (size_t i = 1; i < layer_sizes.size(); ++i) {
         int curr_size = layer_sizes[i];
@@ -22,28 +33,56 @@ ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n) 
     }
 }
 
-Matrix ANN::forward(const Matrix& input) const {
+Matrix ANN::forward(const Matrix& input) {
     if (input.get_dim_len() != 2 || input.get_dims_index(1) != layer_sizes[0]) {
         throw std::invalid_argument("Invalid input size!");
     }
+
+    z_cache.clear();
+    a_cache.clear();
     
     Matrix ret = input.clone();
     for (size_t i = 0; i < layer_sizes.size(); ++i) {
+        a_cache.push_back(ret.clone());
         ret = ret.matmul(weights[i]);
+        if (i != layer_sizes.size() - 1) {
+            z_cache.push_back(ret.clone());
+        }
         ret.add_inplace(biases[i]);
         if (activations[i] == RELU) {
             ret.apply_inplace(relu);
         } else if (activations[i] == SIGMOID) {
             ret.apply_inplace(sigmoid);
-        } else {
+        } else if (activations[i] == SOFTMAX) {
             apply_softmax(ret);
+        } else {
+            throw std::invalid_argument("Invalid activation.");
         }
     }
 
     return ret;
 }
 
-std::tuple<std::vector<Matrix>, std::vector<Matrix>> ANN::backprop() const {
+std::tuple<std::vector<Matrix>, std::vector<Matrix>> ANN::backprop(const Matrix& init_d_loss) const {
+    Matrix d_loss = init_d_loss.clone();
+
+    std::vector<Matrix> d_weights;
+    std::vector<Matrix> d_biases;
+
+    for (size_t i = layer_sizes.size() - 1; i > -1; i--) {
+        d_weights.push_back(a_cache[i].transpose2d().matmul(d_loss));
+        d_biases.push_back(d_loss.sum_rows());
+        d_loss = d_loss.matmul(weights[i].transpose2d());
+        if (activations[i] == RELU) {
+            d_loss.emul_inplace(z_cache[i-1].apply(deriv_relu));
+        } else if (activations[i] == SIGMOID) {
+            d_loss.emul_inplace(z_cache[i-1].apply(deriv_sigmoid));
+        } else {
+            throw std::invalid_argument("Invalid activation for backprop.");
+        }
+    }
+
+    return std::make_tuple(d_weights, d_biases);
 
 }
 
