@@ -13,10 +13,10 @@ ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n) 
 
     //Can change in future if we want to generalize this class.
     for (size_t i = 0; i < layer_sizes.size(); ++i) {
-        if (i != layer_sizes.size() - 1 && activations_n[i] == SOFTMAX) {
+        if (i != layer_sizes.size() - 1 && activations[i] == SOFTMAX) {
             throw std::invalid_argument("Hidden layers cannot have SOFTMAX.");
         }
-        if (i == layer_sizes.size() - 1 && activations_n[i] != SOFTMAX) {
+        if (i == layer_sizes.size() - 1 && activations[i] != SOFTMAX) {
             throw std::invalid_argument("Final layer must have SOFTMAX for cross_entropy backprop.");
         }
     }

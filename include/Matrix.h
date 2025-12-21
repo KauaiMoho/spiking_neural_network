@@ -12,12 +12,12 @@ class Matrix {
 private:
 
     //flattened approach
-    float* data;
-    int* dims;
-    int* dists;
     int dim_len;
     int data_len;
     size_t aligned_data_len;
+    int* dims;
+    int* dists;
+    float* data;
     static bool cuda;
     static int tile;
     
@@ -49,7 +49,11 @@ public:
     Matrix(const int* dims_n, int dim_len, const float* data_n);//Create a new matrix with a given data array (flattened, row major), will copy data
     Matrix(const int* dims_n, int dim_len, float val);//Create a new matrix filled with a given float
     Matrix(const int* dims_n, int dim_len, unsigned int random_seed = 0);//Create a new matrix filled with random floats between [0-1), can set seed
-    ~Matrix();
+    Matrix(const Matrix& other);//Copy constructor
+    Matrix& operator=(const Matrix& other);//Copy assignment operator
+    Matrix(Matrix&& other) noexcept;//Move constructor
+    Matrix& operator=(Matrix&& other) noexcept;//Move assignment operator
+    ~Matrix();//Destructor
     Matrix matmul(const Matrix &other) const;//Matmul, extensive docs in source and usage guides. (does not affect original)
     Matrix clone() const;//Return a deep copy clone of this object (does not affect original)
     Matrix scmul(float s) const;//Will multiply matrix by a scalar,  and return new matrix. (does not affect original)

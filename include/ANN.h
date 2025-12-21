@@ -8,23 +8,13 @@
 
 class ANN {
 
-enum Activation {
-    RELU,
-    SIGMOID,
-    SOFTMAX
-};
-
-private:
-
-    std::vector<int> layer_sizes;
-    std::vector<Activation> activations;
-    std::vector<Matrix> weights;
-    std::vector<Matrix> biases;
-    std::vector<Matrix> z_cache;
-    std::vector<Matrix> a_cache;
-    float learning_rate = 0.001;
-    
 public:
+
+    enum Activation {
+        RELU,
+        SIGMOID,
+        SOFTMAX
+    };
 
     ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n);
     Matrix forward(const Matrix& input);
@@ -40,7 +30,17 @@ public:
     static float sigmoid(float x);
     static float deriv_relu(float x);
     static float deriv_sigmoid(float x);
-    
+
+private:
+
+    std::vector<int> layer_sizes;
+    std::vector<Activation> activations;
+    std::vector<Matrix> weights;
+    std::vector<Matrix> biases;
+    std::vector<Matrix> z_cache;
+    std::vector<Matrix> a_cache;
+    float learning_rate = 0.001;
+
 };
 
 #endif

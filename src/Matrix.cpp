@@ -254,12 +254,122 @@ Matrix::Matrix(const int* dims_n, int dim_len, unsigned int random_seed) : dim_l
     }
 }
 
-Matrix::~Matrix() {
-    //NOTE, CANNOT USE = operator: Matrix A = B
-    //TODO: check
-    free(data);
+Matrix::Matrix(const Matrix& other) : dim_len(other.get_dim_len()), data_len(other.data_len), aligned_data_len(other.aligned_data_len) {
+
+    dists = (int*) malloc(dim_len * sizeof(int));
+
+    if (dists == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
+    dims = (int*) malloc(dim_len * sizeof(int));
+
+    if (dims == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
+    for (int i = 0; i < dim_len ; ++i) {
+        dists[i] = other.get_dists()[i];
+        dims[i] = other.get_dims()[i];
+    }
+
+    data = (float*) aligned_alloc(16, aligned_data_len);
+
+    if (data == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
+    for (size_t i = 0; i < data_len; ++i) {
+        data[i] = other.get_data()[i];
+    }
+
+}
+
+Matrix& Matrix::operator=(const Matrix& other) {
+    
+    if (this == &other) {
+        return *this;
+    }
+
     free(dims);
     free(dists);
+    free(data);
+
+    dim_len = other.get_dim_len();
+    data_len = other.data_len;
+    aligned_data_len = other.aligned_data_len;
+
+    dists = (int*) malloc(dim_len * sizeof(int));
+
+    if (dists == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
+    dims = (int*) malloc(dim_len * sizeof(int));
+
+    if (dims == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
+    for (int i = 0; i < dim_len ; ++i) {
+        dists[i] = other.get_dists()[i];
+        dims[i] = other.get_dims()[i];
+    }
+
+    data = (float*) aligned_alloc(16, aligned_data_len);
+
+    if (data == nullptr) {
+        throw std::invalid_argument("Memory allocation error");
+    }
+
+    for (size_t i = 0; i < data_len; ++i) {
+        data[i] = other.get_data()[i];
+    }
+
+    return *this;
+}
+
+Matrix::Matrix(Matrix&& other) noexcept : dim_len(other.get_dim_len()), data_len(other.data_len), aligned_data_len(other.aligned_data_len), 
+       dims(other.get_dims()), dists(other.get_dists()), data(other.get_data()) {
+    other.set_dim_len(0);
+    other.data_len = 0;
+    other.aligned_data_len = 0;
+    other.set_dims(nullptr);
+    other.set_dists(nullptr);
+    other.data = nullptr;
+}
+
+Matrix& Matrix::operator=(Matrix&& other) noexcept {
+
+    if (this == &other) {
+        return *this;
+    }
+
+    free(dims);
+    free(dists);
+    free(data);
+
+    dim_len = other.get_dim_len();
+    data_len = other.data_len;
+    aligned_data_len = other.aligned_data_len;
+    dims = other.get_dims();
+    dists = other.get_dists();
+    data = other.get_data();
+
+    other.set_dim_len(0);
+    other.data_len = 0;
+    other.aligned_data_len = 0;
+    other.set_dims(nullptr);
+    other.set_dists(nullptr);
+    other.data = nullptr;
+
+    return *this;
+}
+
+Matrix::~Matrix() {
+    free(dims);
+    free(dists);
+    free(data);
 }
 
 void Matrix::print_array(const float* arr, int len, int max) const {
@@ -1441,7 +1551,7 @@ Matrix Matrix::sum_rows() const {
         float* tPtr = data;
         float* outPtr = data_out;
 
-        for (size_t j = 0; j + 3 < dims[1]; ++j) {
+        for (size_t j = 0; j + 3 < dims[1]; j += 4) {
             float32x4_t acc = vdupq_n_f32(0.0f);
             for (size_t i = 0; i < dims[0]; ++i) {
                 float32x4_t tf = vld1q_f32(tPtr + i*dims[1] + j);
@@ -1449,9 +1559,9 @@ Matrix Matrix::sum_rows() const {
             }
             vst1q_f32(outPtr, acc);
             outPtr += 4;
-        } 
+        }
 
-        for (size_t j = 0; j < dims[1]%4; ++j) {
+        for (size_t j = 0; j < (dims[1]%4); ++j) {
             (*outPtr) = 0;
             for (size_t i = 0; i < dims[0]; ++i) {
                 (*outPtr) += tPtr[i*dims[1] + j];
