@@ -30,6 +30,7 @@ public:
 
     static void apply_stable_softmax(Matrix& m);
     static float cross_entropy(const Matrix& truth, const Matrix& preds);
+    static int sum_correct(const Matrix& truth, const Matrix& preds);
     static float relu(float x);
     static float sigmoid(float x);
     static float deriv_relu(float x);

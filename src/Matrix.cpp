@@ -25,8 +25,8 @@ Matrix::Matrix(const int* dims_n, int dim_len, const float* data_n) : dim_len(di
     data_len = pos*dims[0];
 
     //Alignment allows for data to start at a memory address aligning with cache line size
-    //Allows for SIMD instructions to be faster and more efficient
-    //The alignment size in general should be a multiple of the alignment value.
+    //Allows for SIMD instructions to be faster and more efficient, as all loads/stores will be within cache line boundaries, avoiding cache misses
+    //The alignment size in general should be a multiple of the alignment value. (this may depend on C++ version)
     data = init_data_alloc(data_len);
 
     for (size_t i = 0; i < data_len; ++i) {
@@ -265,7 +265,7 @@ float* Matrix::default_data_alloc() const {
     float* arr = (float*) aligned_alloc(alignment, aligned_data_len);
 
     if (arr == nullptr) {
-        throw std::invalid_argument("Default data memory allocation error");
+        throw std::runtime_error("Default data memory allocation error");
     }
 
     return arr;
@@ -282,7 +282,7 @@ float* Matrix::init_data_alloc(size_t size) {
     float* arr = (float*) aligned_alloc(alignment, aligned_data_len);
 
     if (arr == nullptr) {
-        throw std::invalid_argument("Init data memory allocation error");
+        throw std::runtime_error("Init data memory allocation error");
     }
 
     return arr;
@@ -299,7 +299,7 @@ float* Matrix::float_size_alloc(size_t size) const {
     float* arr = (float*) aligned_alloc(alignment, a_size);
 
     if (arr == nullptr) {
-        throw std::invalid_argument("Float memory allocation error");
+        throw std::runtime_error("Float memory allocation error");
     }
 
     return arr;
@@ -310,7 +310,7 @@ int* Matrix::int_size_alloc(size_t size) const {
     int* arr = (int*) malloc(size * sizeof(int));
 
     if (arr == nullptr) {
-        throw std::invalid_argument("Int memory allocation error");
+        throw std::runtime_error("Int memory allocation error");
     }
 
     return arr;
@@ -444,15 +444,15 @@ void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const 
     // 2. Contiguous reading allows for direct vectorization, as SIMD loads require it.
     simd_transpose(B, B_t, m, k, z, other_dists);
 
-    for (size_t ic = 0; ic < n; ic += mat_tile){ // Loop over all output tile rows
-        for (size_t lc = 0; lc < k; lc += mat_tile){ // Loop over all output tile cols
+    for (size_t ic = 0; ic < n; ic += mat_tile) { // Loop over all output tile rows
+        for (size_t lc = 0; lc < k; lc += mat_tile){ // Loop over all output tile cols for a given row
             size_t iE = std::min(ic + mat_tile, static_cast<size_t>(n));
-            for (size_t i = ic; i < iE; ++i){
+            for (size_t i = ic; i < iE; ++i) {
                 size_t lE = std::min(lc + mat_tile, static_cast<size_t>(k));
-                for (size_t l = lc; l < lE; ++l){
+                for (size_t l = lc; l < lE; ++l) {
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
-                    for (size_t jc = 0; jc < m; jc += mat_tile) { // Loop over shared dimension m
+                    for (size_t jc = 0; jc < m; jc += mat_tile) { // Loop over shared dimension m, using SIMD to calculate dot product and store.
                         size_t jE = std::min(jc + mat_tile, static_cast<size_t>(m));
 
                         //Broadcasted strides will have a dimension of 0 in strides, allowing for still efficient cache usage
@@ -500,12 +500,12 @@ void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, 
     float* B_t = float_size_alloc(m * k);
     
     simd_transpose(B, B_t, m, k);
-    for (size_t ic = 0; ic < n; ic += mat_tile){
+    for (size_t ic = 0; ic < n; ic += mat_tile) {
         for (size_t lc = 0; lc < k; lc += mat_tile){
             size_t iE = std::min(ic + mat_tile, static_cast<size_t>(n));
             for (size_t i = ic; i < iE; ++i){
                 size_t lE = std::min(lc + mat_tile, static_cast<size_t>(k));
-                for (size_t l = lc; l < lE; ++l){
+                for (size_t l = lc; l < lE; ++l) {
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (size_t jc = 0; jc < m; jc += mat_tile) {

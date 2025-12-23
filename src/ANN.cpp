@@ -113,12 +113,14 @@ void ANN::set_learning_rate(float l) {
 float ANN::cross_entropy(const Matrix& truth, const Matrix& preds) {
     if (truth.get_dim_len() == 2 && preds.get_dim_len() == 2) {
         if (truth.get_dims_index(1) == preds.get_dims_index(1)) {
-            float loss = 0;
-            constexpr float epsilon = 1e-7;
-            for (int i = 0; i < truth.get_dims_index(1); ++i) {
-                loss -= truth.get({0, i}) * logf(std::max(preds.get({0, i}), epsilon));
+            float tot_loss = 0;
+            for (int r = 0; r < preds.get_dims_index(0); ++r) {
+                constexpr float epsilon = 1e-7;
+                for (int i = 0; i < truth.get_dims_index(1); ++i) {
+                    tot_loss -= truth.get({r, i}) * logf(std::max(preds.get({r, i}), epsilon));
+                }
             }
-            return loss;
+            return tot_loss / preds.get_dims_index(0);
         } else {
             throw std::invalid_argument("Incompatible shapes for cross_entropy loss!");
         }
@@ -127,24 +129,54 @@ float ANN::cross_entropy(const Matrix& truth, const Matrix& preds) {
     }
 }
 
+int ANN::sum_correct(const Matrix& truth, const Matrix& preds) {
+    if (truth.get_dim_len() == 2 && preds.get_dim_len() == 2) {
+        if (truth.get_dims_index(1) == preds.get_dims_index(1)) {
+            int tot = 0;
+            for (int r = 0; r < preds.get_dims_index(0); ++r) {
+                int pred_max = 0;
+                for (int i = 1; i < preds.get_dims_index(1); ++i) {
+                    if (preds.get({r, pred_max}) < preds.get({r, i})) {
+                        pred_max = i;
+                    }
+                }
+                for (int i = 0; i < truth.get_dims_index(1); ++i) {
+                    if ( abs(1 - truth.get({r, i})) < 1e-7 ) {
+                        if (i == pred_max) {
+                            tot += 1;
+                        }
+                    }
+                }
+            }
+            return tot;
+        } else {
+            throw std::invalid_argument("Incompatible shapes for correctness!");
+        }
+    } else {
+        throw std::invalid_argument("Invalid dimensions for correctness!");
+    }
+}
+
 //Only for a 1D vector. - 1 x N.
 void ANN::apply_stable_softmax(Matrix& m) {
     if (m.get_dim_len() == 2) {
-        float max = -INFINITY;
-        for (int i = 0; i < m.get_dims_index(1); ++i) {
-            float val = m.get({0, i});
-            if (val > max) {
-                max = val;
+        for (int r = 0; r < m.get_dims_index(0); ++r) {
+            float max = -INFINITY;
+            for (int i = 0; i < m.get_dims_index(1); ++i) {
+                float val = m.get({r, i});
+                if (val > max) {
+                    max = val;
+                }
             }
-        }
-        float sum = 0;
-        for (int i = 0; i < m.get_dims_index(1); ++i) {
-            float val = expf(m.get({0, i}) - max);
-            sum += val;
-            m.set({0, i}, val);
-        }
-        for (int i = 0; i < m.get_dims_index(1); ++i) {
-            m.set({0, i}, m.get({0, i}) / sum);
+            float sum = 0;
+            for (int i = 0; i < m.get_dims_index(1); ++i) {
+                float val = expf(m.get({r, i}) - max);
+                sum += val;
+                m.set({r, i}, val);
+            }
+            for (int i = 0; i < m.get_dims_index(1); ++i) {
+                m.set({r, i}, m.get({r, i}) / sum);
+            }
         }
     } else {
         throw std::invalid_argument("Invalid dimension for softmax!");

@@ -3,6 +3,106 @@
 #include <iostream>
 #include <vector>
 #include <stdexcept>
+#include <fstream>
+#include <filesystem>
+
+//X, Y
+std::tuple<std::vector<Matrix>, std::vector<Matrix>> load_MNIST_data(bool train, int batch_size) {
+
+    std::vector<Matrix> X;
+    std::vector<Matrix> Y;
+
+    std::ifstream imgFile;
+    std::ifstream labFile;
+    int images = 0;
+    if (train) {
+        imgFile = std::ifstream("data/train-images.idx3-ubyte", std::ios::binary);
+        labFile = std::ifstream("data/train-labels.idx1-ubyte", std::ios::binary);
+        images = 60000;
+    } else {
+        imgFile = std::ifstream("data/t10k-images.idx3-ubyte", std::ios::binary);
+        labFile = std::ifstream("data/t10k-labels.idx1-ubyte", std::ios::binary);
+        images = 10000;
+    }
+
+    if (!imgFile.is_open() || !labFile.is_open()) {
+        throw std::runtime_error("Failed to open MNIST files");
+    }
+
+    //Skip Headers
+    imgFile.seekg(16, std::ios::beg);
+    labFile.seekg(8, std::ios::beg);
+
+    constexpr int rows = 28;
+    constexpr int cols = 28;
+
+    int img_dims[2] = {batch_size, rows * cols};
+    int lab_dims[2] = {batch_size, 10};
+
+    //Ignore last few data entries that would be less than batch size.
+    for (int ic = 0; ic + batch_size < images; ic += batch_size) {
+
+        float* image_data = (float*) malloc(batch_size * rows * cols * sizeof(float));
+
+        if (image_data == nullptr) {
+            throw std::runtime_error("Memory allocation error");
+        }
+
+        float* label_data = (float*) malloc(batch_size * 10 * sizeof(float));
+
+        if (image_data == nullptr) {
+            throw std::runtime_error("Memory allocation error");
+        }
+
+        for (int i = 0; i < batch_size * 10; ++i) {
+            label_data[i] = 0;
+        }
+        
+        for (int i = 0; i < batch_size; ++i) {
+            std::vector<unsigned char> temp_img(rows * cols);
+            imgFile.read((char*)temp_img.data(), rows * cols);
+            for (int j = 0; j < rows * cols; ++j) {
+                image_data[(i * rows * cols) + j] = static_cast<float>(temp_img[j]) / 255.0f; //Normalize image intensity.
+            }
+
+            unsigned char temp_label;
+            labFile.read((char*)&temp_label, sizeof(temp_label));
+            label_data[(i * 10) + (int)temp_label] = 1.0f;
+        }
+
+        X.push_back(Matrix(img_dims, 2, image_data));
+        Y.push_back(Matrix(lab_dims, 2, label_data));
+    }
+
+    return std::make_tuple(X, Y);
+}
+
+void train(ANN& model, const std::vector<Matrix>& X, const std::vector<Matrix>& Y, int epochs, int batch_size) {
+    for (size_t i = 0; i < epochs; ++i) {
+        int correct = 0;
+        float loss = 0;
+        for (size_t i = 0; i < X.size(); ++i) {
+            Matrix output = model.forward(X[i]);
+            loss += ANN::cross_entropy(Y[i], output);
+            correct += ANN::sum_correct(Y[i], output);
+            Matrix d_loss = output.add(Y[i].scmul(-1)).scmul(1.0 / batch_size);
+            model.backprop(d_loss);
+            model.update_weights_biases();
+            model.clear_grads_and_cache();
+        }
+        std::cout << "Epoch: " << i << " === Loss: " << loss / (float) X.size() << " === Accuracy: " << correct / ((float) X.size() * batch_size) << "\n";
+    }
+}
+
+void test(ANN& model, const std::vector<Matrix>& X, const std::vector<Matrix>& Y, int batch_size) {
+    int correct = 0;
+    for (size_t i = 0; i < X.size(); ++i) {
+        Matrix test_output = model.forward(X[i]);
+        model.clear_grads_and_cache();
+        correct += ANN::sum_correct(Y[i], test_output);
+    }
+    std::cout << "Test accuracy: " << correct / ((float) X.size() * batch_size) << "\n";
+}
 
 int main() {
     std::vector<int> sizes = {784, 128, 64, 10};
@@ -15,31 +115,17 @@ int main() {
 
     model.print_weights();
     model.print_biases();
+    std::cout << "\n";
 
-    int batch = 1;
-    int dim_input[] = {batch, 784};
-    int dim_output[] = {batch, 10};
+    constexpr int batch_size = 64;
+    
+    std::tuple<std::vector<Matrix>, std::vector<Matrix>> train_dataset = load_MNIST_data(true, batch_size);
+    std::tuple<std::vector<Matrix>, std::vector<Matrix>> test_dataset = load_MNIST_data(false, batch_size);
 
-    //Same size as MNIST, but random for while testing code run only (not functionality)
-    //Later change to be dataloaded
-    Matrix test_input = Matrix(dim_input, 2);
-
-    Matrix test_correct_label = Matrix(dim_output, 2, (float)0);
-    //Pretend like the correct label is the letter C
-    test_correct_label.set({0, 2}, 1);
-
-    Matrix test_output = model.forward(test_input);
-
-    std::cout << "Loss: " << ANN::cross_entropy(test_correct_label, test_output) << "\n";
-
-    //Crossentropy Loss + Softmax Derivitive - A given for this implementation to avoid Jacobian math.
-    Matrix test_d_loss = test_output.add(test_correct_label.scmul(-1));
-    model.backprop(test_d_loss);
-    model.update_weights_biases();
-
+    train(model, std::get<0>(train_dataset), std::get<1>(train_dataset), 5, batch_size);
+    test(model, std::get<0>(test_dataset), std::get<1>(test_dataset), batch_size);
+   
+    std::cout << "\n";
     model.print_weights();
     model.print_biases();
-
-    std::cout << "FINISHED!\n";
-
 }
