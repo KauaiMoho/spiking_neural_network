@@ -321,7 +321,7 @@ void Matrix::print_array(const float* arr, int len, int max) const {
     for (size_t i = 0; i < end; ++i) {
         std::cout << arr[i];
         if (i < end - 1) {
-             std::cout << ", ";
+            std::cout << ", ";
         }
     }
     std::cout << "\n";
@@ -332,7 +332,7 @@ void Matrix::print_array(const int* arr, int len, int max) const {
     for (size_t i = 0; i < end; ++i) {
         std::cout << arr[i];
         if (i < end - 1) {
-             std::cout << ", ";
+            std::cout << ", ";
         }
     }
     std::cout << "\n";
@@ -532,6 +532,18 @@ void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, 
         }
     }
     free(B_t);
+}
+
+void Matrix::matmul_cpu_naive(const float* A, const float* B, float* C, int n, int m, int k) const {
+    for (size_t i = 0; i < n; ++i) {
+        for (size_t l = 0; l < k; ++l) {
+            float sum = 0;
+            for (size_t j = 0; j < m; ++j) {
+                sum += A[i*m + j] * B[j*k + l];
+            }
+            C[i*k + l] = sum;
+        }
+    }
 }
 
 void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const int* dists_new) const {
@@ -800,7 +812,11 @@ Matrix Matrix::matmul(const Matrix& other) const {
             if (cuda) {
                 matmul_cuda(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             } else {
+                
                 matmul_cpu(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+
+                //For testing, comment out for real improvments.
+                //matmul_cpu_naive(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             }
             Matrix ret = Matrix(new_dims, 2, data_out, false);
             return ret;

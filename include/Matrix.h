@@ -30,6 +30,8 @@ private:
     void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) const;
     void matmul_cpu_batched(const float* A, const float* B, float* C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const;
     void matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k) const;
+    void matmul_cpu_naive(const float* A, const float* B, float* C, int n, int m, int k) const; // For comparison.
+
 
     //Will transpose a matrix physically using simd operations, used internally for efficient matmul and public facing transpose2d.
     void simd_transpose(const float* A, float* B, int n, int m, int z = 0, const int* dists_new = nullptr) const;

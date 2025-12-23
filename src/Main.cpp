@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <fstream>
 #include <filesystem>
+#include <chrono>
 
 //X, Y
 std::tuple<std::vector<Matrix>, std::vector<Matrix>> load_MNIST_data(bool train, int batch_size) {
@@ -72,6 +73,9 @@ std::tuple<std::vector<Matrix>, std::vector<Matrix>> load_MNIST_data(bool train,
 
         X.push_back(Matrix(img_dims, 2, image_data));
         Y.push_back(Matrix(lab_dims, 2, label_data));
+
+        free(image_data);
+        free(label_data);
     }
 
     return std::make_tuple(X, Y);
@@ -105,6 +109,9 @@ void test(ANN& model, const std::vector<Matrix>& X, const std::vector<Matrix>& Y
 }
 
 int main() {
+
+    auto start = std::chrono::high_resolution_clock::now();
+
     std::vector<int> sizes = {784, 128, 64, 10};
     std::vector<ANN::Activation> activations = {
         ANN::Activation::RELU, 
@@ -128,4 +135,15 @@ int main() {
     std::cout << "\n";
     model.print_weights();
     model.print_biases();
+    std::cout << "\n";
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
+
+    std::cout << "Time elapsed: " << duration.count() << " s\n";
+
+    // ~140s for vectorized/tiled matmul
+    // ~202s for naive matmul.
+
+    return 0;
 }
