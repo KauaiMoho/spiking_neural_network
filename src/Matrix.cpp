@@ -2,27 +2,20 @@
 
 //Default do not use CUDA
 bool Matrix::cuda = false;
-int Matrix::tile = 16;
+uint16_t Matrix::tile = 512;
+uint16_t Matrix::alignment = 32;
 
 Matrix::Matrix(const int* dims_n, int dim_len, const float* data_n) : dim_len(dim_len) {
     if (dim_len == 0) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
 
-    dists = (int*) malloc(dim_len * sizeof(int));
+    dists = int_size_alloc(dim_len);
 
-    if (dists == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
-
-    dims = (int*) malloc(dim_len * sizeof(int));
-
-    if (dims == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    dims = int_size_alloc(dim_len);
 
     int pos = 1;
-    for (int i = dim_len - 1; i > 0 ; i--) {
+    for (int i = dim_len - 1; i > 0 ; --i) {
         dists[i] = pos;
         dims[i] = dims_n[i];
         pos *= dims[i];
@@ -31,18 +24,10 @@ Matrix::Matrix(const int* dims_n, int dim_len, const float* data_n) : dim_len(di
     dists[0] = pos;
     data_len = pos*dims[0];
 
-
-    aligned_data_len = data_len * sizeof(float);
-    size_t remainder = aligned_data_len % 16;
-    if (remainder != 0) {
-        aligned_data_len += 16 - remainder;
-    }
-
-    data = (float*) aligned_alloc(16, aligned_data_len);
-
-    if (data == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    //Alignment allows for data to start at a memory address aligning with cache line size
+    //Allows for SIMD instructions to be faster and more efficient
+    //The alignment size in general should be a multiple of the alignment value.
+    data = init_data_alloc(data_len);
 
     for (size_t i = 0; i < data_len; ++i) {
         data[i] = data_n[i];
@@ -54,35 +39,16 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists_
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
 
-    //Will copy dists as well incase of broadcasting
-    dists = (int*) malloc(dim_len * sizeof(int));
+    dists = int_size_alloc(dim_len);
 
-    if (dists == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    dims = int_size_alloc(dim_len);
 
-    dims = (int*) malloc(dim_len * sizeof(int));
-
-    if (dims == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
-
-    for (int i = 0; i < dim_len ; ++i) {
+    for (size_t i = 0; i < dim_len ; ++i) {
         dists[i] = dists_n[i];
         dims[i] = dims_n[i];
     }
 
-    aligned_data_len = data_len * sizeof(float);
-    size_t remainder = aligned_data_len % 16;
-    if (remainder != 0) {
-        aligned_data_len += 16 - remainder;
-    }
-
-    data = (float*) aligned_alloc(16, aligned_data_len);
-
-    if (data == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    data = init_data_alloc(data_len);
 
     for (size_t i = 0; i < data_len; ++i) {
         data[i] = data_n[i];
@@ -96,20 +62,12 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
 
     if (copy) {
         //Same as public constructor - can change later to get of repeated code
-        dists = (int*) malloc(dim_len * sizeof(int));
+        dists = int_size_alloc(dim_len);
 
-        if (dists == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
-
-        dims = (int*) malloc(dim_len * sizeof(int));
-
-        if (dims == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        dims = int_size_alloc(dim_len);
 
         int pos = 1;
-        for (int i = dim_len - 1; i > 0 ; i--) {
+        for (int i = dim_len - 1; i > 0 ; --i) {
             dists[i] = pos;
             dims[i] = dims_n[i];
             pos *= dims[i];
@@ -118,18 +76,7 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
         dists[0] = pos;
         data_len = pos*dims[0];
 
-
-        aligned_data_len = data_len * sizeof(float);
-        size_t remainder = aligned_data_len % 16;
-        if (remainder != 0) {
-            aligned_data_len += 16 - remainder;
-        }
-
-        data = (float*) aligned_alloc(16, aligned_data_len);
-
-        if (data == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        data =  init_data_alloc(data_len);
 
         for (size_t i = 0; i < data_len; ++i) {
             data[i] = data_n[i];
@@ -140,19 +87,21 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy) : dim_len(dim
         //NEEDS TO BE ALIGNED
         data = data_n;
 
-        dists = (int*) malloc(dim_len * sizeof(int));
-
-        if (dists == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        dists = int_size_alloc(dim_len);
 
         int pos = 1;
-        for (int i = dim_len - 1; i > 0 ; i--) {
+        for (int i = dim_len - 1; i > 0 ; --i) {
             dists[i] = pos;
             pos *= dims[i];
         }
         dists[0] = pos;
         data_len = pos*dims[0];
+
+        aligned_data_len = data_len * sizeof(float);
+        size_t remainder = aligned_data_len % alignment;
+        if (remainder != 0) {
+            aligned_data_len += alignment - remainder;
+        }
     }
 }
 
@@ -162,20 +111,12 @@ Matrix::Matrix(const int* dims_n, int dim_len, float val) : dim_len(dim_len) {
         throw std::invalid_argument("Matrix dimensions cannot be empty!");
     }
 
-    dists = (int*) malloc(dim_len * sizeof(int));
+    dists = int_size_alloc(dim_len);
 
-    if (dists == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
-
-    dims = (int*) malloc(dim_len * sizeof(int));
-
-    if (dims == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    dims = int_size_alloc(dim_len);
 
     int pos = 1;
-    for (int i = dim_len - 1; i > 0 ; i--) {
+    for (int i = dim_len - 1; i > 0 ; --i) {
         dists[i] = pos;
         dims[i] = dims_n[i];
         pos *= dims[i];
@@ -184,17 +125,7 @@ Matrix::Matrix(const int* dims_n, int dim_len, float val) : dim_len(dim_len) {
     dists[0] = pos;
     data_len = pos*dims[0];
 
-    aligned_data_len = data_len * sizeof(float);
-    size_t remainder = aligned_data_len % 16;
-    if (remainder != 0) {
-        aligned_data_len += 16 - remainder;
-    }
-
-    data = (float*) aligned_alloc(16, aligned_data_len);
-
-    if (data == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    data = init_data_alloc(data_len);
 
     for (size_t i = 0; i < data_len; ++i) {
         data[i] = val;
@@ -211,24 +142,15 @@ Matrix::Matrix(const int* dims_n, int dim_len, unsigned int random_seed) : dim_l
         std::random_device rd;
         random_seed = rd();
     }
-    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+    std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
     std::mt19937 gen(random_seed);
-    float val = dist(gen);
 
-    dists = (int*) malloc(dim_len * sizeof(int));
+    dists = int_size_alloc(dim_len);
 
-    if (dists == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
-
-    dims = (int*) malloc(dim_len * sizeof(int));
-
-    if (dims == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    dims = int_size_alloc(dim_len);
 
     int pos = 1;
-    for (int i = dim_len - 1; i > 0 ; i--) {
+    for (int i = dim_len - 1; i > 0 ; --i) {
         dists[i] = pos;
         dims[i] = dims_n[i];
         pos *= dims[i];
@@ -237,50 +159,28 @@ Matrix::Matrix(const int* dims_n, int dim_len, unsigned int random_seed) : dim_l
     dists[0] = pos;
     data_len = pos*dims[0];
 
-    aligned_data_len = data_len * sizeof(float);
-    size_t remainder = aligned_data_len % 16;
-    if (remainder != 0) {
-        aligned_data_len += 16 - remainder;
-    }
-
-    data = (float*) aligned_alloc(16, aligned_data_len);
-
-    if (data == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    data = init_data_alloc(data_len);
 
     for (size_t i = 0; i < data_len; ++i) {
-        data[i] = val;
+        data[i] = dist(gen);
     }
 }
 
 Matrix::Matrix(const Matrix& other) : dim_len(other.get_dim_len()), data_len(other.data_len), aligned_data_len(other.aligned_data_len) {
 
-    dists = (int*) malloc(dim_len * sizeof(int));
+    dists = int_size_alloc(dim_len);
 
-    if (dists == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
+    dims = int_size_alloc(dim_len);
+
+    for (size_t i = 0; i < dim_len ; ++i) {
+        dists[i] = other.dists[i];
+        dims[i] = other.dims[i];
     }
 
-    dims = (int*) malloc(dim_len * sizeof(int));
-
-    if (dims == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
-
-    for (int i = 0; i < dim_len ; ++i) {
-        dists[i] = other.get_dists()[i];
-        dims[i] = other.get_dims()[i];
-    }
-
-    data = (float*) aligned_alloc(16, aligned_data_len);
-
-    if (data == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    data = default_data_alloc();
 
     for (size_t i = 0; i < data_len; ++i) {
-        data[i] = other.get_data()[i];
+        data[i] = other.data[i];
     }
 
 }
@@ -299,43 +199,31 @@ Matrix& Matrix::operator=(const Matrix& other) {
     data_len = other.data_len;
     aligned_data_len = other.aligned_data_len;
 
-    dists = (int*) malloc(dim_len * sizeof(int));
+    dists = int_size_alloc(dim_len);
 
-    if (dists == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
+    dims = int_size_alloc(dim_len);
+
+    for (size_t i = 0; i < dim_len ; ++i) {
+        dists[i] = other.dists[i];
+        dims[i] = other.dims[i];
     }
 
-    dims = (int*) malloc(dim_len * sizeof(int));
-
-    if (dims == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
-
-    for (int i = 0; i < dim_len ; ++i) {
-        dists[i] = other.get_dists()[i];
-        dims[i] = other.get_dims()[i];
-    }
-
-    data = (float*) aligned_alloc(16, aligned_data_len);
-
-    if (data == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    data = default_data_alloc();
 
     for (size_t i = 0; i < data_len; ++i) {
-        data[i] = other.get_data()[i];
+        data[i] = other.data[i];
     }
 
     return *this;
 }
 
 Matrix::Matrix(Matrix&& other) noexcept : dim_len(other.get_dim_len()), data_len(other.data_len), aligned_data_len(other.aligned_data_len), 
-       dims(other.get_dims()), dists(other.get_dists()), data(other.get_data()) {
-    other.set_dim_len(0);
+       dims(other.dims), dists(other.dists), data(other.data) {
+    other.dim_len = 0;
     other.data_len = 0;
     other.aligned_data_len = 0;
-    other.set_dims(nullptr);
-    other.set_dists(nullptr);
+    other.dims = nullptr;
+    other.dists = nullptr;
     other.data = nullptr;
 }
 
@@ -352,15 +240,15 @@ Matrix& Matrix::operator=(Matrix&& other) noexcept {
     dim_len = other.get_dim_len();
     data_len = other.data_len;
     aligned_data_len = other.aligned_data_len;
-    dims = other.get_dims();
-    dists = other.get_dists();
-    data = other.get_data();
+    dims = other.dims;
+    dists = other.dists;
+    data = other.data;
 
-    other.set_dim_len(0);
+    other.dim_len = 0;
     other.data_len = 0;
     other.aligned_data_len = 0;
-    other.set_dims(nullptr);
-    other.set_dists(nullptr);
+    other.dims = nullptr;
+    other.dists = nullptr;
     other.data = nullptr;
 
     return *this;
@@ -370,6 +258,62 @@ Matrix::~Matrix() {
     free(dims);
     free(dists);
     free(data);
+}
+
+float* Matrix::default_data_alloc() const {
+
+    float* arr = (float*) aligned_alloc(alignment, aligned_data_len);
+
+    if (arr == nullptr) {
+        throw std::invalid_argument("Default data memory allocation error");
+    }
+
+    return arr;
+}
+
+float* Matrix::init_data_alloc(size_t size) {
+
+    aligned_data_len = size * sizeof(float);
+    size_t remainder = aligned_data_len % alignment;
+    if (remainder != 0) {
+        aligned_data_len += alignment - remainder;
+    }
+
+    float* arr = (float*) aligned_alloc(alignment, aligned_data_len);
+
+    if (arr == nullptr) {
+        throw std::invalid_argument("Init data memory allocation error");
+    }
+
+    return arr;
+}
+
+float* Matrix::float_size_alloc(size_t size) const {
+
+    size_t a_size = size * sizeof(float);
+    size_t remainder = a_size % alignment;
+    if (remainder != 0) {
+        a_size += alignment - remainder;
+    }
+
+    float* arr = (float*) aligned_alloc(alignment, a_size);
+
+    if (arr == nullptr) {
+        throw std::invalid_argument("Float memory allocation error");
+    }
+
+    return arr;
+}
+
+int* Matrix::int_size_alloc(size_t size) const {
+
+    int* arr = (int*) malloc(size * sizeof(int));
+
+    if (arr == nullptr) {
+        throw std::invalid_argument("Int memory allocation error");
+    }
+
+    return arr;
 }
 
 void Matrix::print_array(const float* arr, int len, int max) const {
@@ -411,24 +355,30 @@ int Matrix::convert_idx(const std::initializer_list<int>& pos) const {
 }
 
 int* Matrix::get_broadcasted_strides(const int* dims_new, int dim_len_new) const {
+    
     //Gets the new strides (row major, flattened) for a given broadcast
     if (dim_len_new >= dim_len) {
-        int* dists_new = (int*) malloc(dim_len_new * sizeof(int));
+        int* dists_new = int_size_alloc(dim_len_new);
         int diff = dim_len_new - dim_len;
-        if (dists_new == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
 
-        for (int i = dim_len_new - 1; i >= 0 ; i--) {
+        for (int i = dim_len_new - 1; i >= 0 ; --i) {
+
+            //Get correct indexing between two sets of dimensions (dimension size may be unequal)
             int i_old = i - diff;
-            if (i_old < 0) { 
+            if (i_old < 0) {
+                //If the index is out of bounds for the shorter dimension, set its stride to 0 (copy axis along dimension)
                 dists_new[i] = 0;
+
             } else {
+                //If the dimensions match up, the strides will stay the same
                 if (dims[i_old] == dims_new[i]) {
                     dists_new[i] = dists[i_old];
+                //If the dimension being broadcasted is size 1, the elements can just be copied along axis (stride 0)
                 } else if (dims[i_old] == 1) {
                     dists_new[i] = 0;
                 } else {
+                    //Dimensions incompatible, cannot be broadcasted
+                    //Typically will not run since this is already checked during broadcasting dimension computation, but adds fallback error handling.
                     free(dists_new);
                     throw std::invalid_argument("Incompatible dimensions for broadcasting!");
                 }
@@ -440,19 +390,21 @@ int* Matrix::get_broadcasted_strides(const int* dims_new, int dim_len_new) const
     }
 }
 
-void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const {
+int Matrix::get_matmul_tile(size_t matrix_size) const {
 
     //Use loop order to optimize L Cache loading.
     //Use sysctl -a | grep cache to check Apple Silicon Cache Size
 
+    //Can edit later to make this class specific
     constexpr size_t L1_bytes = 64 * 1024;
     constexpr size_t L2_bytes = 4 * 1024 * 1024;
-    constexpr int cache_line_floats = 32;
-    size_t matrix_size_floats = (static_cast<size_t>(n)*m) + (static_cast<size_t>(m)*k) + (static_cast<size_t>(n)*k);
+    constexpr int cache_line_size = 128;
 
     //Choose between L1 and L2 cache based on matrix size
+    size_t cache_line_floats = cache_line_size / sizeof(float);
     size_t usable_cache_bytes;
-    if (matrix_size_floats * sizeof(float) <= L1_bytes) {
+    if (matrix_size * sizeof(float) <= L1_bytes) {
+        //Only use max 2/3 of the available bytes in a given cache.
         usable_cache_bytes = L1_bytes / 1.5;
     } else {
         usable_cache_bytes = L2_bytes / 1.5;
@@ -461,41 +413,47 @@ void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const 
     size_t usable_cache_floats = usable_cache_bytes / sizeof(float);
 
     //Assumption of near square matrices
-    int tile = static_cast<int>(sqrt(usable_cache_floats / 3));
-    tile = tile & ~(cache_line_floats - 1);
-    if (tile == 0) {
-        tile = cache_line_floats;
+    //We need to fit 3 square matrices in our cache (usable_cache_bytes) of choice. Thus, 3 * mat_tile^2 (length of side) = usable_cache_bytes
+    int mat_tile = static_cast<int>(sqrt(usable_cache_floats / 3));
+
+    //Now we round down to cache line size. Could use bit masking since cache line power of 2 (originally i did this, but changed back for clarity): mat_tile & ~(cache_line_floats - 1)
+    //We do this to make sure all cache line data loads are perfectly used, and round down to make sure we do not exceed usable cache size.
+    mat_tile -= mat_tile%cache_line_floats;
+    if (mat_tile == 0) {
+        //If tile size is small, stick with cache line float size.
+        mat_tile = cache_line_floats;
     }
 
-    // Process small tile of A and corresponding tile of B:
-    //     - Load A_tile into cache once
-    //     - Load B_tile into cache once
-    //     - Compute small block of C_tile
+    //Now we will only work with sub matrices of size mat_tile, which is good as it will allow the matmul code to always pull/write straight from CPU cache, avoiding slower memory access.
 
-    size_t size = m * k * sizeof(float);
-    size_t remainder = size % 16;
-    if (remainder != 0) {
-        size += 16 - remainder;
-    }
+    return mat_tile;
 
-    float* B_t = (float*) aligned_alloc(16, size);
+}
 
-    if (B_t == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const {
 
+    int mat_tile = get_matmul_tile(static_cast<size_t>(n)*m) + (static_cast<size_t>(m)*k) + (static_cast<size_t>(n)*k);
+
+    float* B_t = float_size_alloc(m * k);
+
+    //We choose to transpose the data physically because reading col - major is inefficient for cache, even if we just transpose the 
+    //dist strides the cache reading will be slow for large matrices + wanted to challenge myself to write a simd transpose.
+
+    //2 main benefits:
+    // 1. Transposing allows for contiguous reading of columns for matrix B (due to storage in row-major), which avoids cache misses.
+    // 2. Contiguous reading allows for direct vectorization, as SIMD loads require it.
     simd_transpose(B, B_t, m, k, z, other_dists);
 
-    for (int ic = 0; ic < n; ic += tile){
-        for (int lc = 0; lc < k; lc += tile){
-            int iE = std::min(ic+tile, n);
+    for (size_t ic = 0; ic < n; ic += mat_tile){ // Loop over all output tile rows
+        for (size_t lc = 0; lc < k; lc += mat_tile){ // Loop over all output tile cols
+            size_t iE = std::min(ic + mat_tile, static_cast<size_t>(n));
             for (size_t i = ic; i < iE; ++i){
-                int lE = std::min(lc+tile, k);
+                size_t lE = std::min(lc + mat_tile, static_cast<size_t>(k));
                 for (size_t l = lc; l < lE; ++l){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
-                    for (int jc = 0; jc < m; jc += tile) {
-                        int jE =  std::min(jc+tile, m);
+                    for (size_t jc = 0; jc < m; jc += mat_tile) { // Loop over shared dimension m
+                        size_t jE = std::min(jc + mat_tile, static_cast<size_t>(m));
 
                         //Broadcasted strides will have a dimension of 0 in strides, allowing for still efficient cache usage
                         const float* ptrA = &A[z*this_dists[0] + i*this_dists[1] + jc*this_dists[2]];
@@ -523,69 +481,35 @@ void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const 
 }
 
 void Matrix::matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) const {
-    //TODO: Uncomment after compiling with nvcc
+    //Uncomment after compiling with nvcc
     //::matmul_cuda(A, B, C, n, m, k);
 }
 
-//A = nxm
-//B = mxk
-//C = nxk
-//Stride A = m
-//Stride B = k
-//Stride C = k
-//Assume matrix dimensions near square for cache optimization simplicity.
 void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k) const {
 
-    //Use loop order to optimize L Cache loading.
-    //Use sysctl -a | grep cache to check Apple Silicon Cache Size
+    //A = nxm
+    //B = mxk
+    //C = nxk
+    //Stride A = m
+    //Stride B = k
+    //Stride C = k
+    //Assume matrix dimensions near square for cache optimization simplicity.
 
-    constexpr size_t L1_bytes = 64 * 1024;
-    constexpr size_t L2_bytes = 4 * 1024 * 1024;
-    constexpr int cache_line_floats = 16;
-    size_t matrix_size_floats = (static_cast<size_t>(n)*m) + (static_cast<size_t>(m)*k) + (static_cast<size_t>(n)*k);
+    int mat_tile = get_matmul_tile(static_cast<size_t>(n)*m) + (static_cast<size_t>(m)*k) + (static_cast<size_t>(n)*k);
 
-    //Choose between L1 and L2 cache based on matrix size
-    size_t usable_cache_bytes;
-    if (matrix_size_floats * sizeof(float) <= L1_bytes) {
-        usable_cache_bytes = L1_bytes / 1.5;
-    } else {
-        usable_cache_bytes = L2_bytes / 1.5;
-    }
-
-    size_t usable_cache_floats = usable_cache_bytes / sizeof(float);
-
-    //Assumption of near square matrices, make sure tile is multiple of cache_line_floats
-    int tile = static_cast<int>(sqrt(usable_cache_floats / 3));
-    tile = tile & ~(cache_line_floats - 1);
-    if (tile == 0) {
-        tile = cache_line_floats;
-    }
-
-    size_t size = m * k * sizeof(float);
-    size_t remainder = size % 16;
-    if (remainder != 0) {
-        size += 16 - remainder;
-    }
-
-    float* B_t = (float*) aligned_alloc(16, size);
+    float* B_t = float_size_alloc(m * k);
     
-    if (B_t == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
-    
-    //We choose to transpose the data physically because reading col - major is inefficient for cache, even if we just transpose the 
-    //dist strides the cache reading will be slow for large matrices +, wanted to challenge myself to write a simd transpose.
     simd_transpose(B, B_t, m, k);
-    for (int ic = 0; ic < n; ic += tile){
-        for (int lc = 0; lc < k; lc += tile){
-            int iE = std::min(ic+tile, n);
+    for (size_t ic = 0; ic < n; ic += mat_tile){
+        for (size_t lc = 0; lc < k; lc += mat_tile){
+            size_t iE = std::min(ic + mat_tile, static_cast<size_t>(n));
             for (size_t i = ic; i < iE; ++i){
-                int lE = std::min(lc+tile, k);
+                size_t lE = std::min(lc + mat_tile, static_cast<size_t>(k));
                 for (size_t l = lc; l < lE; ++l){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
-                    for (int jc = 0; jc < m; jc += tile) {
-                        int jE =  std::min(jc+tile, m);
+                    for (size_t jc = 0; jc < m; jc += mat_tile) {
+                        size_t jE =  std::min(jc + mat_tile, static_cast<size_t>(m));
                         const float* ptrA = &A[i*m + jc];
                         float* ptrB = &B_t[l*m + jc];
                         for (size_t j = jc; j + 3 < jE; j += 4) {
@@ -611,8 +535,6 @@ void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, 
 }
 
 void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const int* dists_new) const {
-    
-    size_t tile = 16;
 
     //We choose to repeat code rather than make a temp dists var so that the original dists_new can stay const (cannot free if 
     //we use const temp_dists_new).
@@ -624,6 +546,8 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
             for (size_t jc = 0; jc + tile <= m; jc += tile) {
                 for (size_t i = ic; i < ic+tile; i += 4) {
                     for (size_t j = jc; j < jc+tile; j += 4) {
+
+                        //Does 4x4 sections, and a scalar cleanup.
                         //Load 16 elements from A to tranpose into B
                         // a = [a0 a1 a2 a3]
                         // b = [b0 b1 b2 b3]
@@ -734,16 +658,16 @@ Matrix Matrix::matmul(const Matrix& other) const {
         //Dimension 1 x 1 = Dot product
         
         if (other.get_dims_index(0) == dims[0]) {
-            int* new_dims = (int*) malloc(sizeof(int));
-            if (new_dims == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            int* new_dims = int_size_alloc(1);
             new_dims[0] = 1;
             float data_out = 0;
             float32x4_t acc = vdupq_n_f32(0.0f);
-            for (int jc = 0; jc < data_len; jc += tile) {
-                int jE =  std::min(jc+tile, data_len);
-                const float* oPtr = other.get_data() + jc;
+
+            //SIMD loop just loops through both vectors and accumulates their dot product sum into one SIMD load, doing the final addition across the 4 lanes at the end.
+            //Makes use of basic, heuristic tiling to try and keep very large vectors within L1 cache, but this dosent really affect usual small scale performance 
+            for (size_t jc = 0; jc < data_len; jc += tile) {
+                size_t jE =  std::min(jc + tile, static_cast<size_t>(data_len));
+                const float* oPtr = other.data + jc;
                 float* tPtr = data + jc;
                 for (size_t j = jc; j + 3 < jE; j += 4) {
                     float32x4_t a = vld1q_f32(oPtr);
@@ -769,33 +693,22 @@ Matrix Matrix::matmul(const Matrix& other) const {
 
         //n x m X m x 1 = n x 1
         if (other.get_dims_index(0) == dims[1]) {
-            int* new_dims = (int*) malloc(sizeof(int));
-            if (new_dims == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            int* new_dims = int_size_alloc(1);
             new_dims[0] = dims[0];
 
-            size_t size = new_dims[0] * sizeof(float);
-            size_t remainder = size % 16;
-            if (remainder != 0) {
-                size += 16 - remainder;
-            }
+            float* data_out = float_size_alloc(new_dims[0]);
 
-            float* data_out = (float*) aligned_alloc(16, size);
-
-            if (data_out == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
-
-            for (int ic = 0; ic < new_dims[0]; ic += tile){
-                int iE = std::min(ic+tile, new_dims[0]);
+            //Loop through all rows, accumulating dot product with vector. After computing each dot product row_n * vector, 
+            //add it to corresponding row index of output array. Dot product computation is sped up with SIMD, same as above.
+            for (size_t ic = 0; ic < new_dims[0]; ic += tile){
+                size_t iE = std::min(ic + tile, static_cast<size_t>(new_dims[0]));
                 for (size_t i = ic; i < iE; ++i){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
-                    for (int jc = 0; jc < dims[1]; jc += tile) {
-                        int jE =  std::min(jc+tile, dims[1]);
+                    for (size_t jc = 0; jc < dims[1]; jc += tile) {
+                        size_t jE =  std::min(jc + tile,  static_cast<size_t>(dims[1]));
                         float* ptrA = &data[i*dims[1] + jc];
-                        float* ptrB = &(other.get_data()[jc]);
+                        float* ptrB = &(other.data[jc]);
                         for (size_t j = jc; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
@@ -822,52 +735,30 @@ Matrix Matrix::matmul(const Matrix& other) const {
         // dimension 1 x 2 = Vector Product
         //1 x m X m x k = 1 x k
         if (other.get_dims_index(0) == dims[0]) {
-            int* new_dims = (int*) malloc(sizeof(int));
-            if (new_dims == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            int* new_dims = int_size_alloc(1);
 
             //Transpose to avoid col-wide inefficent access
 
             size_t m = other.get_dims_index(0);
             size_t k = other.get_dims_index(1);
 
-            size_t size_other = m * k * sizeof(float);
-            size_t remainder_other = size_other % 16;
-            if (remainder_other != 0) {
-                size_other += 16 - remainder_other;
-            }
+            float* other_t = float_size_alloc(m * k);
 
-            float* other_t = (float*) aligned_alloc(16, size_other);
-            
-            if (other_t == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
-
-            float* data_other = other.get_data();
+            float* data_other = other.data;
             simd_transpose(data_other, other_t, m, k);
 
             new_dims[0] = k;
 
-            size_t size = new_dims[0] * sizeof(float);
-            size_t remainder = size % 16;
-            if (remainder != 0) {
-                size += 16 - remainder;
-            }
+            float* data_out = float_size_alloc(new_dims[0]);
 
-            float* data_out = (float*) aligned_alloc(16, size);
-
-            if (data_out == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
-
-            for (int ic = 0; ic < new_dims[0]; ic += tile){
-                int iE = std::min(ic+tile, new_dims[0]);
+            // After transposing, the workings of this function is exactly the same as the matrix-vector product.
+            for (size_t ic = 0; ic < new_dims[0]; ic += tile){
+                size_t iE = std::min(ic + tile, static_cast<size_t>(new_dims[0]));
                 for (size_t i = ic; i < iE; ++i){
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
-                    for (int jc = 0; jc < dims[0]; jc += tile) {
-                        int jE =  std::min(jc+tile, dims[0]);
+                    for (size_t jc = 0; jc < dims[0]; jc += tile) {
+                        size_t jE =  std::min(jc + tile, static_cast<size_t>(dims[0]));
                         float* ptrA = &data[jc];
                         float* ptrB = &other_t[i*dims[0] + jc];
                         for (size_t j = jc; j + 3 < jE; j += 4) {
@@ -894,66 +785,57 @@ Matrix Matrix::matmul(const Matrix& other) const {
         }
         throw std::invalid_argument("Invalid vector-matrix product dimensions!");
     } else if (other.get_dim_len() == 2 && dim_len == 2) {
+
         // Dimension 2 x 2 = Matrix multiplication
         // Will perform This X Other
         if (dims[1] == other.get_dims_index(0)) {
 
-            int* new_dims = (int*) malloc(2 * sizeof(int));
-            if (new_dims == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            int* new_dims = int_size_alloc(2);
+
             new_dims[0] = dims[0];
             new_dims[1] = other.get_dims_index(1);
 
-            size_t size = new_dims[0] * new_dims[1] * sizeof(float);
-            size_t remainder = size % 16;
-            if (remainder != 0) {
-                size += 16 - remainder;
-            }
+            float* data_out = float_size_alloc(new_dims[0] * new_dims[1]);
 
-            float* data_out = (float*) aligned_alloc(16, size);
-
-            if (data_out == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            } 
             if (cuda) {
-                matmul_cuda(data, other.get_data(), data_out, new_dims[0], dims[1], new_dims[1]);
+                matmul_cuda(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             } else {
-                matmul_cpu(data, other.get_data(), data_out, new_dims[0], dims[1], new_dims[1]);
+                matmul_cpu(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             }
             Matrix ret = Matrix(new_dims, 2, data_out, false);
             return ret;
         }
         throw std::invalid_argument("Invalid matrix-matrix product dimensions!");
     } else if (other.get_dim_len() >= 2 && dim_len >= 2) {
+
         // Dimension n x n = Batched matrix multiplaction with broadcasting
         //Will perform This X Other, batched
         int other_dim_len = other.get_dim_len();
         if (dims[dim_len-1] == other.get_dims_index(other_dim_len - 2)) {
-            int broadcast_dim_len = std::max(dim_len, other_dim_len);
-            int* broadcast_dims = (int*) malloc(broadcast_dim_len * sizeof(int));
-            if (broadcast_dims == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            int broadcast_dim_len = std::max(static_cast<int>(dim_len), other_dim_len);
+            int* broadcast_dims = int_size_alloc(broadcast_dim_len);
+
+            //Select which dimension will be broadcasted - shorter one will be broadcasted.
             if (dim_len >= other_dim_len) {
                 int diff = broadcast_dim_len - other_dim_len;
-                for (int i = dim_len - 3; i >= 0 ; --i) {
+                for (int i = dim_len - 3; i >= 0 ; --i) { // Loop through all dimensions except last 2 (which are reserved for matmul)
                     int i_other = i - diff;
-                    if (i_other < 0) { 
-                        broadcast_dims[i] = dims[i];
+                    if (i_other < 0) { // If dimension is shorter, replace all unfilled dimensions with longer dimensions.
+                        broadcast_dims[i] = dims[i]; 
                     } else {
                         int other_dim = other.get_dims_index(i_other);
-                        if (dims[i] == other_dim || other_dim == 1) {
+                        if (dims[i] == other_dim || other_dim == 1) { //If dimension size is the same or 1, set to main dimension (1 case will be handled by strides)
                             broadcast_dims[i] = dims[i];
                         } else if (dims[i] == 1) {
-                            broadcast_dims[i] = other_dim;
-                        } else {
+                            broadcast_dims[i] = other_dim; //Same goes for the other set of dimensions.
+                        } else { //Dimensions incompatible (not the same or atleast one is not 1)
                             free(broadcast_dims);
                             throw std::invalid_argument("Incompatible dimensions for matmul batch broadcasting!");
                         }
                     }
                 }
             } else {
+                //Same code if other dimension is shorter.
                 int diff = broadcast_dim_len - dim_len;
                 for (int i = other_dim_len - 3; i >= 0 ; --i) {
                     int other_dim = other.get_dims_index(i);
@@ -975,11 +857,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
 
             //We MUST allocate this on the heap due to how the destructor for this class works - free will fail.
             // - Could add a boolean flag to notify destructor if stack-allocated, but increased complexity/less readable
-            int* bmm_shape = (int*) malloc(3 * sizeof(int));
-
-            if (bmm_shape == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            int* bmm_shape = int_size_alloc(3);
 
             bmm_shape[0] = 1;
             bmm_shape[1] = dims[dim_len - 2];
@@ -1004,27 +882,19 @@ Matrix Matrix::matmul(const Matrix& other) const {
             //Avoid malloc to call constructor
             std::thread* threads = new std::thread[n_threads];
 
-            size_t size = bmm_shape[0] * dims[dim_len - 2] * bmm_shape[2] * sizeof(float);
-            size_t remainder = size % 16;
-            if (remainder != 0) {
-                size += 16 - remainder;
-            }
+            float* data_out = float_size_alloc(bmm_shape[0] * dims[dim_len - 2] * bmm_shape[2]);
 
-            float* data_out = (float*) aligned_alloc(16, size);
-
-            if (data_out == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
-
-            //each thread handles an set of indivisual slices (divided evenly between all possible threads)
+            //Each thread handles an set of indivisual slices (divided evenly between all possible threads)
             for (size_t t = 0; t < n_threads; ++t) {
                 threads[t] = std::thread([&, t]() {
                     for (size_t i = t; i < bmm_shape[0]; i += n_threads) {
-                        matmul_cpu_batched(data, other.get_data(), data_out, this_dists, other_dists, 
+                        matmul_cpu_batched(data, other.data, data_out, this_dists, other_dists, 
                                 dims[dim_len - 2], dims[dim_len - 1], bmm_shape[2], i);
                     }
                 });
             }
+
+            //Wait for all threads to finish.
             for (size_t i = 0; i < n_threads; ++i) {
                 threads[i].join();
             }
@@ -1050,11 +920,7 @@ Matrix Matrix::clone() const {
 
 Matrix Matrix::scmul(float s) const {
 
-    float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-
-    if (data_out == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    } 
+    float* data_out = default_data_alloc();
 
     float32x4_t scalar = vdupq_n_f32(s);
     float* tPtr = data;
@@ -1076,26 +942,20 @@ Matrix Matrix::scmul(float s) const {
     return ret;
 }
 
-//Will prioritize row-col addition over col-row addition
 Matrix Matrix::emul(const Matrix& other) const {
 
+    //SIMD largely same as add - check add method for notes.
     //Matrix - Vector element mul - specific, quicker kernel for ANN
-    //Could generalize in future by doing broadcasting, but would be largely the same as matmul
-    //Must be 2D and row major (cannot be semantically reshaped/broadcast/transpose)
     if (other.get_dim_len() == 1 && dim_len == 2) {
 
-        if (other.get_dims_index(0) == dims[1]) { //Add row to cols
+        if (other.get_dims_index(0) == dims[1]) {
 
-            float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-            if (data_out == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            float* data_out = default_data_alloc();
 
             float* tPtr = data;
             float* outPtr = data_out;
-            float* oPtr = other.get_data();
+            float* oPtr = other.data;
 
-            //Dont do tiling to match rest of add, can do in future.
             for (size_t i = 0; i < dims[0]; ++i){
                 for (size_t j = 0; j + 3 < dims[1]; j += 4) {
                     float32x4_t tf = vld1q_f32(tPtr);
@@ -1115,18 +975,14 @@ Matrix Matrix::emul(const Matrix& other) const {
             Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
             return ret;
 
-        } else if (other.get_dims_index(0) == dims[0]) { //Add col to rows
+        } else if (other.get_dims_index(0) == dims[0]) {
 
-            float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-            if (data_out == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            float* data_out = default_data_alloc();
 
             float* tPtr = data;
             float* outPtr = data_out;
-            float* oPtr = other.get_data();
+            float* oPtr = other.data;
 
-            //Dont do tiling to match rest of add, can do in future.
             for (size_t i = 0; i < dims[0]; ++i){
                 float vec_float = *oPtr;
                 float32x4_t af = vdupq_n_f32(vec_float);
@@ -1160,13 +1016,9 @@ Matrix Matrix::emul(const Matrix& other) const {
             }
         }
 
-        float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-
-        if (data_out == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        float* data_out = default_data_alloc();
         
-        const float* oPtr = other.get_data();
+        const float* oPtr = other.data;
         float* tPtr = data;
         float* outPtr = data_out;
 
@@ -1191,7 +1043,6 @@ Matrix Matrix::emul(const Matrix& other) const {
     }
 }
 
-//Will prioritize row-col addition over col-row addition
 Matrix Matrix::add(const Matrix& other) const {
 
     //Matrix - Vector add - specific, quicker kernel for ANN
@@ -1199,18 +1050,15 @@ Matrix Matrix::add(const Matrix& other) const {
     //Must be 2D and row major (cannot be semantically reshaped/broadcast/transpose)
     if (other.get_dim_len() == 1 && dim_len == 2) {
 
-        if (other.get_dims_index(0) == dims[1]) { //Add row to cols
+        if (other.get_dims_index(0) == dims[1]) { //Add 1d vector to rows
 
-            float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-            if (data_out == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            float* data_out = default_data_alloc();
 
             float* tPtr = data;
             float* outPtr = data_out;
-            float* oPtr = other.get_data();
+            float* oPtr = other.data;
 
-            //Dont do tiling to match rest of add, can do in future.
+            //SIMD Loop: will iterate over rows (contigous) and add vector, with a scalar cleanup
             for (size_t i = 0; i < dims[0]; ++i){
                 for (size_t j = 0; j + 3 < dims[1]; j += 4) {
                     float32x4_t tf = vld1q_f32(tPtr);
@@ -1230,18 +1078,17 @@ Matrix Matrix::add(const Matrix& other) const {
             Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
             return ret;
 
-        } else if (other.get_dims_index(0) == dims[0]) { //Add col to rows
+        } else if (other.get_dims_index(0) == dims[0]) { //Add 1d vector to cols
 
-            float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-            if (data_out == nullptr) {
-                throw std::invalid_argument("Memory allocation error");
-            }
+            float* data_out = default_data_alloc();
 
             float* tPtr = data;
             float* outPtr = data_out;
-            float* oPtr = other.get_data();
+            float* oPtr = other.data;
 
-            //Dont do tiling to match rest of add, can do in future.
+            //Since cols are non contigous in row-major memory, loop makes use that each row will have the same float added to it.
+            //Loop through rows, duplicating the corresponding float across one SIMD load and adding it. Scalar cleanup in end
+            //Allows for the method to utilize SIMD operations even for non-contigous memory.
             for (size_t i = 0; i < dims[0]; ++i){
                 float vec_float = *oPtr;
                 float32x4_t af = vdupq_n_f32(vec_float);
@@ -1275,18 +1122,14 @@ Matrix Matrix::add(const Matrix& other) const {
             }
         }
 
-        float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-
-        if (data_out == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        float* data_out = default_data_alloc();
         
-        const float* oPtr = other.get_data();
+        const float* oPtr = other.data;
         float* tPtr = data;
         float* outPtr = data_out;
 
+        //Very simple SIMD loop, just loop over internal data array (row-major) and add.
         for (size_t i = 0; i + 3 < data_len; i += 4) {
-
             float32x4_t af = vld1q_f32(oPtr);
             float32x4_t tf = vld1q_f32(tPtr);
             float32x4_t add = vaddq_f32(af, tf);
@@ -1308,11 +1151,7 @@ Matrix Matrix::add(const Matrix& other) const {
 
 Matrix Matrix::apply(float (*func)(float)) const {
 
-    float* data_out = (float*) aligned_alloc(16, aligned_data_len);
-
-    if (data_out == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    float* data_out = default_data_alloc();
     
     for (size_t i = 0; i < data_len; ++i) {
         data_out[i] = func(data[i]);
@@ -1323,21 +1162,17 @@ Matrix Matrix::apply(float (*func)(float)) const {
 }
 
 Matrix Matrix::transpose2d() const {
-    if (dim_len == 2) {
+    if (dim_len == 1) {
 
-        float* data_out = (float*) aligned_alloc(16, aligned_data_len);
+        return clone();
 
-        if (data_out == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+    } else if (dim_len == 2) {
+
+        float* data_out = default_data_alloc();
 
         simd_transpose(data, data_out, dims[0], dims[1]);
 
-        int* dims_new = (int*) malloc(dim_len * sizeof(int));
-
-        if (dims_new == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        int* dims_new = int_size_alloc(2);
 
         dims_new[0] = dims[1];
         dims_new[1] = dims[0];
@@ -1345,7 +1180,7 @@ Matrix Matrix::transpose2d() const {
         Matrix ret = Matrix(dims_new, dim_len, data_out, false);
         return ret;
     } else {
-        throw std::invalid_argument("Invalid matrix dimensions! Must be 2d");
+        throw std::invalid_argument("Invalid matrix dimensions! Must be 1D or 2D!");
     }
 }
 
@@ -1373,7 +1208,7 @@ void Matrix::emul_inplace(const Matrix& other) {
         if (other.get_dims_index(0) == dims[1]) {
 
             float* tPtr = data;
-            float* oPtr = other.get_data();
+            float* oPtr = other.data;
 
             for (size_t i = 0; i < dims[0]; ++i){
                 for (size_t j = 0; j + 3 < dims[1]; j += 4) {
@@ -1392,9 +1227,9 @@ void Matrix::emul_inplace(const Matrix& other) {
         } else if (other.get_dims_index(0) == dims[0]) {
 
             float* tPtr = data;
-            float* oPtr = other.get_data();
+            float* oPtr = other.data;
 
-            for (int i = 0; i < dims[0]; ++i){
+            for (size_t i = 0; i < dims[0]; ++i){
                 float vec_float = *oPtr;
                 float32x4_t af = vdupq_n_f32(vec_float);
                 for (size_t j = 0; j + 3 < dims[1]; j += 4) {
@@ -1422,7 +1257,7 @@ void Matrix::emul_inplace(const Matrix& other) {
             }
         }
         
-        const float* oPtr = other.get_data();
+        const float* oPtr = other.data;
         float* tPtr = data;
 
         for (size_t i = 0; i + 3 < data_len; i += 4) {
@@ -1449,7 +1284,7 @@ void Matrix::add_inplace(const Matrix& other) {
         if (other.get_dims_index(0) == dims[1]) { //Add row to cols
 
             float* tPtr = data;
-            float* oPtr = other.get_data();
+            float* oPtr = other.data;
 
             //Dont do tiling to match rest of add, can do in future.
             for (size_t i = 0; i < dims[0]; ++i){
@@ -1469,10 +1304,10 @@ void Matrix::add_inplace(const Matrix& other) {
         } else if (other.get_dims_index(0) == dims[0]) { //Add col to rows
 
             float* tPtr = data;
-            float* oPtr = other.get_data();
+            float* oPtr = other.data;
 
             //Dont do tiling to match rest of add, can do in future.
-            for (int i = 0; i < dims[0]; ++i){
+            for (size_t i = 0; i < dims[0]; ++i){
                 float vec_float = *oPtr;
                 float32x4_t af = vdupq_n_f32(vec_float);
                 for (size_t j = 0; j + 3 < dims[1]; j += 4) {
@@ -1500,7 +1335,7 @@ void Matrix::add_inplace(const Matrix& other) {
             }
         }
         
-        const float* oPtr = other.get_data();
+        const float* oPtr = other.data;
         float* tPtr = data;
 
         for (size_t i = 0; i + 3 < data_len; i += 4) {
@@ -1529,30 +1364,18 @@ void Matrix::apply_inplace(float (*func)(float)) {
 Matrix Matrix::sum_rows() const {
     if (dim_len == 2) {
 
-        int* new_dims = (int*) malloc(sizeof(int));
-        if (new_dims == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        int* new_dims = int_size_alloc(1);
         new_dims[0] = dims[1];
 
-        size_t size = dims[1] * sizeof(float);
-
-        size_t remainder = size % 16;
-        if (remainder != 0) {
-            size += 16 - remainder;
-        }
-
-        float* data_out = (float*) aligned_alloc(16, size);
-
-        if (data_out == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        float* data_out = float_size_alloc(dims[1]);
 
         float* tPtr = data;
         float* outPtr = data_out;
 
+        //Loop through all cols by 4, using SIMD to add all rows (since rows are contigous)
         for (size_t j = 0; j + 3 < dims[1]; j += 4) {
             float32x4_t acc = vdupq_n_f32(0.0f);
+            //Use the SIMD accumulator to add all rows for each stride of cols.
             for (size_t i = 0; i < dims[0]; ++i) {
                 float32x4_t tf = vld1q_f32(tPtr + i*dims[1] + j);
                 acc = vaddq_f32(acc, tf);
@@ -1561,6 +1384,7 @@ Matrix Matrix::sum_rows() const {
             outPtr += 4;
         }
 
+        //Scalar cleanup of columns. Generally cache inefficient (high amount of misses), but this is fine for a scalar cleanup as will only happen 3 times max.
         for (size_t j = 0; j < (dims[1]%4); ++j) {
             (*outPtr) = 0;
             for (size_t i = 0; i < dims[0]; ++i) {
@@ -1581,29 +1405,18 @@ Matrix Matrix::sum_rows() const {
 Matrix Matrix::sum_cols() const {
     if (dim_len == 2) {
 
-        int* new_dims = (int*) malloc(sizeof(int));
-        if (new_dims == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        int* new_dims = int_size_alloc(1);
         new_dims[0] = dims[0];
 
-        size_t size = dims[0] * sizeof(float);
-
-        size_t remainder = size % 16;
-        if (remainder != 0) {
-            size += 16 - remainder;
-        }
-
-        float* data_out = (float*) aligned_alloc(16, size);
-
-        if (data_out == nullptr) {
-            throw std::invalid_argument("Memory allocation error");
-        }
+        float* data_out = float_size_alloc(dims[0]);
 
         float* tPtr = data;
         float* outPtr = data_out;
 
+        //Loop through all rows, use SIMD to add since arrays are store in row-major format.
         for (size_t i = 0; i < dims[0]; ++i) {
+
+            //SIMD Loop to add all row elements except tail
             float32x4_t acc = vdupq_n_f32(0.0f);
             for (size_t j = 0; j + 3 < dims[1]; j += 4) {
                 float32x4_t tf = vld1q_f32(tPtr);
@@ -1611,6 +1424,8 @@ Matrix Matrix::sum_cols() const {
                 tPtr += 4;
             }
             (*outPtr) = vaddvq_f32(acc);
+
+            //Scalar tail if needed, will always run at most 3 times.
             for (size_t j = 0; j < (dims[1]%4); ++j) {
                 (*outPtr) += *(tPtr);
                 tPtr += 1;
@@ -1630,12 +1445,16 @@ Matrix Matrix::sum_cols() const {
 float Matrix::sum() const {
     float* tPtr = data;
     float out = 0;
+    float32x4_t acc = vdupq_n_f32(0.0f);
 
+    //Loop over internal data array and accumulate sum in one SIMD buffer.
     for (size_t i = 0; i + 3 < data_len; i += 4) {
         float32x4_t tf = vld1q_f32(tPtr);
-        out += vaddvq_f32(tf);
+        acc = vaddq_f32(acc, tf);
         tPtr += 4;
     }
+    //Bring SIMD sum into float
+    out = vaddvq_f32(acc);
 
     for (size_t i = 0; i < data_len % 4; ++i) {
         out += tPtr[i];
@@ -1678,10 +1497,7 @@ int Matrix::get_dim_len() const {
 }
 
 int* Matrix::get_dists_clone() const {
-    int* dists_clone = (int*) malloc(dim_len * sizeof(int));
-    if (dists_clone == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    int* dists_clone = int_size_alloc(dim_len);
     for (size_t i = 0; i < dim_len; ++i) {
         dists_clone[i] = dists[i];
     }
@@ -1689,41 +1505,11 @@ int* Matrix::get_dists_clone() const {
 }
 
 int* Matrix::get_dims_clone() const {
-    int* dims_clone = (int*) malloc(dim_len * sizeof(int));
-    if (dims_clone == nullptr) {
-        throw std::invalid_argument("Memory allocation error");
-    }
+    int* dims_clone = int_size_alloc(dim_len);
     for (size_t i = 0; i < dim_len; ++i) {
         dims_clone[i] = dims[i];
     }
     return dims_clone;
-}
-
-void Matrix::set_dim_len(int dim_len_n) {
-    //UNCHECKED, INTERNAL BMM USE ONLY
-    dim_len = dim_len_n;
-}
-
-void Matrix::set_dims(int* dims_n) {
-    //UNCHECKED, INTERNAL BMM USE ONLY
-    dims = dims_n;
-}
-
-void Matrix::set_dists(int* dists_n) {
-    //UNCHECKED, INTERNAL BMM USE ONLY
-    dists = dists_n;
-}
-
-int* Matrix::get_dims() const {
-    return dims;
-}
-
-int* Matrix::get_dists() const {
-    return dists;
-}
-
-float* Matrix::get_data() const {
-    return data;
 }
 
 void Matrix::print_data(int max) const {
@@ -1753,4 +1539,12 @@ void Matrix::set_tile(int t) {
 
 int Matrix::get_tile() {
     return tile;
+}
+
+void Matrix::set_alignment(size_t a) {
+    alignment = a;
+}
+
+int Matrix::get_alignment() {
+    return alignment;
 }
