@@ -1,7 +1,5 @@
 // #include <cuda_runtime.h>
 
-//Need to get hardware capable for testing.
-
 //A, B, C - pointers in memory, where AxB = C
 //A = nxm
 //B = mxk
@@ -11,8 +9,9 @@
 //Stride C = k
 //Add __global__ tag once I find device compatible with nvcc
 void matmul_kernel(float* A, float* B, float* C, int n, int m, int k) {
-    //TODO: Tiling, handle matmul of A and B into C
-    //Sychronize multiple threads handling matmul for each reigon
+    //Note that CUDA kernels are written in thread perspective
+    // const unsigned int x = blockIdx.y * blockDim.y + threadIdx.y;
+    // const unsigned int y = blockIdx.x * blockDim.y + threadIdx.x;
 }
 
 extern "C" void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) {

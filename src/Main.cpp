@@ -124,7 +124,7 @@ int main() {
     model.print_biases();
     std::cout << "\n";
 
-    constexpr int batch_size = 64;
+    constexpr int batch_size = 20;
     
     std::tuple<std::vector<Matrix>, std::vector<Matrix>> train_dataset = load_MNIST_data(true, batch_size);
     std::tuple<std::vector<Matrix>, std::vector<Matrix>> test_dataset = load_MNIST_data(false, batch_size);
@@ -142,6 +142,7 @@ int main() {
 
     std::cout << "Time elapsed: " << duration.count() << " s\n";
 
+    //For batch size 64
     // ~140s for vectorized/tiled matmul
     // ~202s for naive matmul.
 
