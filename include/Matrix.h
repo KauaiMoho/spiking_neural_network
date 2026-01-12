@@ -6,6 +6,7 @@
 #include <arm_neon.h>
 #include <random>
 #include <algorithm>
+#include <tuple>
 
 class Matrix {
 
@@ -26,7 +27,7 @@ private:
     Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists); //Strictly for direct cloning, use incase view has changed (reshape/broadcast).
     int convert_idx(const std::initializer_list<int>& pos) const;//Convert given index to 1d flattend index using strides
 
-    int get_matmul_tile(size_t matrix_size) const; // Get a tile size for a specific matix size. It will assume matrix dimensions are square for fitting into cache for simplicity.
+    std::tuple<int,int,int> get_matmul_tile(int n, int m, int k) const; // Get a tile size for a specific matix size. It will assume matrix dimensions are square for fitting into cache for simplicity.
     void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) const;
     void matmul_cpu_batched(const float* A, const float* B, float* C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const;
     void matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k) const;

@@ -124,7 +124,7 @@ int main() {
     model.print_biases();
     std::cout << "\n";
 
-    constexpr int batch_size = 20;
+    constexpr int batch_size = 64;
     
     std::tuple<std::vector<Matrix>, std::vector<Matrix>> train_dataset = load_MNIST_data(true, batch_size);
     std::tuple<std::vector<Matrix>, std::vector<Matrix>> test_dataset = load_MNIST_data(false, batch_size);
