@@ -3,7 +3,7 @@
 //Default do not use CUDA
 bool Matrix::cuda = false;
 uint16_t Matrix::tile = 512;
-uint16_t Matrix::alignment = 32; //16 minimum for SIMD optimization, doing more since i have the memory and better for cache lines (64 byte)
+uint16_t Matrix::alignment = 32; //16 minimum for SIMD optimization, can change to that
 
 Matrix::Matrix(const int* dims_n, int dim_len, const float* data_n) : dim_len(dim_len) {
     if (dim_len == 0) {
@@ -415,6 +415,8 @@ std::tuple<int,int,int> Matrix::get_matmul_tile(int n, int m, int k) const {
     //Use a heuristic (1/3 of available space for shared dim, assuming near square), and make the other two tile dims porportional to their size
     //T_n*T_m + T_m*T_k + T_n*T_k = usable_cache_floats - need to solve this
 
+    // tile_size^2 * 3 = cache size
+
     int T_n = static_cast<int>(sqrt((usable_cache_floats * n) / (3.0 * k)));
     int T_m = static_cast<int>(sqrt(usable_cache_floats / 3.0));
     int T_k = static_cast<int>(sqrt((usable_cache_floats * k) / (3.0 * n)));
@@ -808,7 +810,6 @@ Matrix Matrix::matmul(const Matrix& other) const {
                     data_out[i] = sum;
                 }   
             }
-
             free(other_t);
             Matrix ret = Matrix(new_dims, 1, data_out, false);
             return ret;
