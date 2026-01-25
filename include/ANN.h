@@ -16,7 +16,7 @@ public:
         SOFTMAX
     };
 
-    ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n);
+    ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n, unsigned int seed = 0);
     Matrix forward(const Matrix& input);
     void backprop(const Matrix& init_d_loss);
     void update_weights_biases();

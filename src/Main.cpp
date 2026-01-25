@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <chrono>
 
+//Check compiled assembly for matrix class: g++ -O3 -S src/Matrix.cpp -o matmul.s -I include
+
 //X, Y
 std::tuple<std::vector<Matrix>, std::vector<Matrix>> load_MNIST_data(bool train, int batch_size) {
 
@@ -118,7 +120,7 @@ int main() {
         ANN::Activation::RELU, 
         ANN::Activation::SOFTMAX
     };
-    ANN model = ANN(sizes, activations);
+    ANN model = ANN(sizes, activations, 17);
 
     model.print_weights();
     model.print_biases();
@@ -143,7 +145,7 @@ int main() {
     std::cout << "Time elapsed: " << duration.count() << " s\n";
 
     //For batch size 64
-    // ~140s for vectorized/tiled matmul
+    // 138s for vectorized/tiled matmul
     // ~202s for naive matmul.
     //Lower batch sizes -> More accurate but slower.
 

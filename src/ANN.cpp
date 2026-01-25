@@ -1,7 +1,7 @@
 #include "ANN.h"
 
-ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n) : 
-    layer_sizes(std::move(layer_sizes_n)), activations(std::move(activations_n)) 
+ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n, unsigned int seed) : 
+    layer_sizes(std::move(layer_sizes_n)), activations(std::move(activations_n))
 {
     if (layer_sizes.size() != activations.size() + 1) {
         throw std::invalid_argument("Layer counts must match activation counts!");
@@ -27,7 +27,7 @@ ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n) 
         int curr_size = layer_sizes[i];
         int dims_weights[] = {prev_size, curr_size};
         int dims_biases[] = {curr_size};
-        weights.push_back(Matrix(dims_weights, 2));
+        weights.push_back(Matrix(dims_weights, 2, seed));
         biases.push_back(Matrix(dims_biases, 1, (float)0));
         prev_size = curr_size;
     }

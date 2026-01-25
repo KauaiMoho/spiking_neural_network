@@ -6,3 +6,4 @@ matrix_tests
 external/
 data/
 *_bin
+*.s

@@ -3,7 +3,6 @@
 //Default do not use CUDA
 bool Matrix::cuda = false;
 uint16_t Matrix::tile = 512;
-uint16_t Matrix::alignment = 32; //16 minimum for SIMD optimization, can change to that
 
 Matrix::Matrix(const int* dims_n, int dim_len, const float* data_n) : dim_len(dim_len) {
     if (dim_len == 0) {
@@ -1574,10 +1573,6 @@ void Matrix::set_tile(int t) {
 
 int Matrix::get_tile() {
     return tile;
-}
-
-void Matrix::set_alignment(size_t a) {
-    alignment = a;
 }
 
 int Matrix::get_alignment() {

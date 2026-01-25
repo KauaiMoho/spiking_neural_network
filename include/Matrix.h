@@ -21,7 +21,12 @@ private:
     float* data;
     static bool cuda;
     static uint16_t tile; // MUST be a multiple of 4.
-    static uint16_t alignment;
+    static constexpr uint16_t alignment = 32; //16 minimum for SIMD optimization, can change to that
+
+    template <typename T>
+    static inline T* assume_aligned(T* ptr) {
+        return static_cast<T*>(__builtin_assume_aligned(ptr, alignment));
+    }
     
     Matrix(int* dims_n, int dim_len, float* data_n, bool copy);//Create a new matrix with given data, can choose to copy or take ownership
     Matrix(int* dims_n, int dim_len, float* data_n, int data_len, int*dists); //Strictly for direct cloning, use incase view has changed (reshape/broadcast).
@@ -85,9 +90,7 @@ public:
     static bool get_CUDA(); //Get CUDA usage
     static void set_tile(int t);
     static int get_tile();
-    static void set_alignment(size_t a);
     static int get_alignment();
-
 };
 
 extern "C" void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k);
