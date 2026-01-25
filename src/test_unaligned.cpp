@@ -104,11 +104,11 @@ void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, 
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (size_t jc = 0; jc < m; jc += T_m) {
                         size_t jE =  std::min(jc + T_m, static_cast<size_t>(m));
-                        const float* ptrA = assume_aligned(&A[i*m + jc]);
-                        const float* ptrB = assume_aligned(&B_t[l*m + jc]);
+                        const float* ptrA = &A[i*m + jc];
+                        const float* ptrB = &B_t[l*m + jc];
                         for (size_t j = jc; j + 3 < jE; j += 4) {
-                            float32x4_t a = vld1q_f32(assume_aligned(ptrA));
-                            float32x4_t b = vld1q_f32(assume_aligned(ptrB));
+                            float32x4_t a = vld1q_f32(ptrA);
+                            float32x4_t b = vld1q_f32(ptrB);
                             ptrA += 4;
                             ptrB += 4;
                             acc = vaddq_f32(acc, vmulq_f32(a, b));
@@ -149,10 +149,10 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
                         // d = [d0 d1 d2 d3]
 
                         
-                        float32x4_t a = vld1q_f32(assume_aligned(&A[offset + i*m + j]));
-                        float32x4_t b = vld1q_f32(assume_aligned(&A[offset + (i + 1)*m + j]));
-                        float32x4_t c = vld1q_f32(assume_aligned(&A[offset + (i + 2)*m + j]));
-                        float32x4_t d = vld1q_f32(assume_aligned(&A[offset + (i + 3)*m + j]));
+                        float32x4_t a = vld1q_f32(&A[offset + i*m + j]);
+                        float32x4_t b = vld1q_f32(&A[offset + (i + 1)*m + j]);
+                        float32x4_t c = vld1q_f32(&A[offset + (i + 2)*m + j]);
+                        float32x4_t d = vld1q_f32(&A[offset + (i + 3)*m + j]);
 
                         //Transpose halves (swap even and odd lanes)
                         //[a0 a1 a2 a3]      [a0 b0 a2 b2]
@@ -175,10 +175,10 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
                         float32x4_t r3 = vcombine_f32(vget_high_f32(p0.val[1]), vget_high_f32(p1.val[1]));
 
                         //Store into B (no alignment checks)
-                        vst1q_f32(assume_aligned(&B[j*n + i]), r0);
-                        vst1q_f32(assume_aligned(&B[(j + 1)*n + i]), r1);
-                        vst1q_f32(assume_aligned(&B[(j + 2)*n + i]), r2);
-                        vst1q_f32(assume_aligned(&B[(j + 3)*n + i]), r3);
+                        vst1q_f32(&B[j*n + i], r0);
+                        vst1q_f32(&B[(j + 1)*n + i], r1);
+                        vst1q_f32(&B[(j + 2)*n + i], r2);
+                        vst1q_f32(&B[(j + 3)*n + i], r3);
                     }
                 }
             }
@@ -211,10 +211,10 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
             for (size_t jc = 0; jc + tile <= m; jc += tile) {
                 for (size_t i = ic; i < ic+tile; i += 4) {
                     for (size_t j = jc; j < jc+tile; j += 4) {
-                        float32x4_t a = vld1q_f32(assume_aligned(&A[z*dists_new[0] + i*dists_new[1] + j*dists_new[2]]));
-                        float32x4_t b = vld1q_f32(assume_aligned(&A[z*dists_new[0] + (i + 1)*dists_new[1] + j*dists_new[2]]));
-                        float32x4_t c = vld1q_f32(assume_aligned(&A[z*dists_new[0] + (i + 2)*dists_new[1] + j*dists_new[2]]));
-                        float32x4_t d = vld1q_f32(assume_aligned(&A[z*dists_new[0] + (i + 3)*dists_new[1] + j*dists_new[2]]));
+                        float32x4_t a = vld1q_f32(&A[z*dists_new[0] + i*dists_new[1] + j*dists_new[2]]);
+                        float32x4_t b = vld1q_f32(&A[z*dists_new[0] + (i + 1)*dists_new[1] + j*dists_new[2]]);
+                        float32x4_t c = vld1q_f32(&A[z*dists_new[0] + (i + 2)*dists_new[1] + j*dists_new[2]]);
+                        float32x4_t d = vld1q_f32(&A[z*dists_new[0] + (i + 3)*dists_new[1] + j*dists_new[2]]);
                         
                         float32x4x2_t p0 = vtrnq_f32(a, b);
                         float32x4x2_t p1 = vtrnq_f32(c, d);
@@ -224,10 +224,10 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
                         float32x4_t r2 = vcombine_f32(vget_high_f32(p0.val[0]), vget_high_f32(p1.val[0]));
                         float32x4_t r3 = vcombine_f32(vget_high_f32(p0.val[1]), vget_high_f32(p1.val[1]));
 
-                        vst1q_f32(assume_aligned(&B[j*n + i]), r0);
-                        vst1q_f32(assume_aligned(&B[(j + 1)*n + i]), r1);
-                        vst1q_f32(assume_aligned(&B[(j + 2)*n + i]), r2);
-                        vst1q_f32(assume_aligned(&B[(j + 3)*n + i]), r3);
+                        vst1q_f32(&B[j*n + i], r0);
+                        vst1q_f32(&B[(j + 1)*n + i], r1);
+                        vst1q_f32(&B[(j + 2)*n + i], r2);
+                        vst1q_f32(&B[(j + 3)*n + i], r3);
                     }
                 }
             }
