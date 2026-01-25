@@ -8,6 +8,8 @@
 #include <chrono>
 
 //Check compiled assembly for matrix class: g++ -O3 -S src/Matrix.cpp -o matmul.s -I include
+//Check compiled assembly for unaligned matrix class: g++ -O3 -mno-unaligned-access -S src/Matrix.cpp -o matmul_una.s -I include
+//Check diff: diff -u matmul.s matmul_una.s | less 
 
 //X, Y
 std::tuple<std::vector<Matrix>, std::vector<Matrix>> load_MNIST_data(bool train, int batch_size) {
