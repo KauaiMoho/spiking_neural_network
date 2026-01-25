@@ -474,10 +474,10 @@ void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const 
 
                         //Broadcasted strides will have a dimension of 0 in strides, allowing for still efficient cache usage
                         const float* ptrA = &A[z*this_dists[0] + i*this_dists[1] + jc*this_dists[2]];
-                        float* ptrB = &B_t[l*m + jc];
+                        const float* ptrB = &B_t[l*m + jc];
                         for (size_t j = jc; j + 3 < jE; j += 4) {
-                            float32x4_t a = vld1q_f32(ptrA);
-                            float32x4_t b = vld1q_f32(ptrB);
+                            float32x4_t a = vld1q_f32(assume_aligned(ptrA));
+                            float32x4_t b = vld1q_f32(assume_aligned(ptrB));
                             ptrA += 4 * this_dists[2];
                             ptrB += 4;
                             acc = vaddq_f32(acc, vmulq_f32(a, b));
@@ -530,8 +530,8 @@ void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, 
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (size_t jc = 0; jc < m; jc += T_m) {
                         size_t jE =  std::min(jc + T_m, static_cast<size_t>(m));
-                        const float* ptrA = &A[i*m + jc];
-                        float* ptrB = &B_t[l*m + jc];
+                        const float* ptrA = assume_aligned(&A[i*m + jc]);
+                        const float* ptrB = assume_aligned(&B_t[l*m + jc]);
                         for (size_t j = jc; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
@@ -585,10 +585,12 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
                         // b = [b0 b1 b2 b3]
                         // c = [c0 c1 c2 c3]
                         // d = [d0 d1 d2 d3]
-                        float32x4_t a = vld1q_f32(&A[offset + i*m + j]);
-                        float32x4_t b = vld1q_f32(&A[offset + (i + 1)*m + j]);
-                        float32x4_t c = vld1q_f32(&A[offset + (i + 2)*m + j]);
-                        float32x4_t d = vld1q_f32(&A[offset + (i + 3)*m + j]);
+
+                        
+                        float32x4_t a = vld1q_f32(assume_aligned(&A[offset + i*m + j]));
+                        float32x4_t b = vld1q_f32(assume_aligned(&A[offset + (i + 1)*m + j]));
+                        float32x4_t c = vld1q_f32(assume_aligned(&A[offset + (i + 2)*m + j]));
+                        float32x4_t d = vld1q_f32(assume_aligned(&A[offset + (i + 3)*m + j]));
 
                         //Transpose halves (swap even and odd lanes)
                         //[a0 a1 a2 a3]      [a0 b0 a2 b2]
@@ -610,7 +612,7 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
                         float32x4_t r2 = vcombine_f32(vget_high_f32(p0.val[0]), vget_high_f32(p1.val[0]));
                         float32x4_t r3 = vcombine_f32(vget_high_f32(p0.val[1]), vget_high_f32(p1.val[1]));
 
-                        //Store into B
+                        //Store into B (no alignment checks)
                         vst1q_f32(&B[j*n + i], r0);
                         vst1q_f32(&B[(j + 1)*n + i], r1);
                         vst1q_f32(&B[(j + 2)*n + i], r2);
@@ -647,10 +649,10 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z, const
             for (size_t jc = 0; jc + tile <= m; jc += tile) {
                 for (size_t i = ic; i < ic+tile; i += 4) {
                     for (size_t j = jc; j < jc+tile; j += 4) {
-                        float32x4_t a = vld1q_f32(&A[z*dists_new[0] + i*dists_new[1] + j*dists_new[2]]);
-                        float32x4_t b = vld1q_f32(&A[z*dists_new[0] + (i + 1)*dists_new[1] + j*dists_new[2]]);
-                        float32x4_t c = vld1q_f32(&A[z*dists_new[0] + (i + 2)*dists_new[1] + j*dists_new[2]]);
-                        float32x4_t d = vld1q_f32(&A[z*dists_new[0] + (i + 3)*dists_new[1] + j*dists_new[2]]);
+                        float32x4_t a = vld1q_f32(assume_aligned(&A[z*dists_new[0] + i*dists_new[1] + j*dists_new[2]]));
+                        float32x4_t b = vld1q_f32(assume_aligned(&A[z*dists_new[0] + (i + 1)*dists_new[1] + j*dists_new[2]]));
+                        float32x4_t c = vld1q_f32(assume_aligned(&A[z*dists_new[0] + (i + 2)*dists_new[1] + j*dists_new[2]]));
+                        float32x4_t d = vld1q_f32(assume_aligned(&A[z*dists_new[0] + (i + 3)*dists_new[1] + j*dists_new[2]]));
                         
                         float32x4x2_t p0 = vtrnq_f32(a, b);
                         float32x4x2_t p1 = vtrnq_f32(c, d);
@@ -698,8 +700,8 @@ Matrix Matrix::matmul(const Matrix& other) const {
             //Makes use of basic, heuristic tiling to try and keep very large vectors within L1 cache, but this dosent really affect usual small scale performance 
             for (size_t jc = 0; jc < data_len; jc += tile) {
                 size_t jE =  std::min(jc + tile, static_cast<size_t>(data_len));
-                const float* oPtr = other.data + jc;
-                float* tPtr = data + jc;
+                const float* oPtr = assume_aligned(other.data + jc);
+                const float* tPtr = assume_aligned(data + jc);
                 for (size_t j = jc; j + 3 < jE; j += 4) {
                     float32x4_t a = vld1q_f32(oPtr);
                     float32x4_t b = vld1q_f32(tPtr);
@@ -738,8 +740,8 @@ Matrix Matrix::matmul(const Matrix& other) const {
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (size_t jc = 0; jc < dims[1]; jc += tile) {
                         size_t jE =  std::min(jc + tile,  static_cast<size_t>(dims[1]));
-                        float* ptrA = &data[i*dims[1] + jc];
-                        float* ptrB = &(other.data[jc]);
+                        const float* ptrA = assume_aligned(&data[i*dims[1] + jc]);
+                        const float* ptrB = assume_aligned(&(other.data[jc]));
                         for (size_t j = jc; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
@@ -790,8 +792,8 @@ Matrix Matrix::matmul(const Matrix& other) const {
                     float32x4_t acc = vdupq_n_f32(0.0f);
                     for (size_t jc = 0; jc < dims[0]; jc += tile) {
                         size_t jE =  std::min(jc + tile, static_cast<size_t>(dims[0]));
-                        float* ptrA = &data[jc];
-                        float* ptrB = &other_t[i*dims[0] + jc];
+                        const float* ptrA = assume_aligned(&data[jc]);
+                        const float* ptrB = assume_aligned(&other_t[i*dims[0] + jc]);
                         for (size_t j = jc; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
@@ -957,7 +959,7 @@ Matrix Matrix::scmul(float s) const {
     float* data_out = default_data_alloc();
 
     float32x4_t scalar = vdupq_n_f32(s);
-    float* tPtr = data;
+    const float* tPtr = assume_aligned(data);
     float* outPtr = data_out;
 
     for (size_t i = 0; i + 3 < data_len; i += 4) {
@@ -986,10 +988,10 @@ Matrix Matrix::emul(const Matrix& other) const {
 
             float* data_out = default_data_alloc();
 
-            float* tPtr = data;
+            const float* tPtr = assume_aligned(data);
+            const float* oPtr = assume_aligned(other.data);
             float* outPtr = data_out;
-            float* oPtr = other.data;
-
+            
             for (size_t i = 0; i < dims[0]; ++i){
                 for (size_t j = 0; j + 3 < dims[1]; j += 4) {
                     float32x4_t tf = vld1q_f32(tPtr);
@@ -1013,9 +1015,9 @@ Matrix Matrix::emul(const Matrix& other) const {
 
             float* data_out = default_data_alloc();
 
-            float* tPtr = data;
+            const float* tPtr = assume_aligned(data);
+            const float* oPtr = assume_aligned(other.data);
             float* outPtr = data_out;
-            float* oPtr = other.data;
 
             for (size_t i = 0; i < dims[0]; ++i){
                 float vec_float = *oPtr;
@@ -1052,8 +1054,8 @@ Matrix Matrix::emul(const Matrix& other) const {
 
         float* data_out = default_data_alloc();
         
-        const float* oPtr = other.data;
-        float* tPtr = data;
+        const float* oPtr = assume_aligned(other.data);
+        const float* tPtr = assume_aligned(data);
         float* outPtr = data_out;
 
         for (size_t i = 0; i + 3 < data_len; i += 4) {
@@ -1088,9 +1090,9 @@ Matrix Matrix::add(const Matrix& other) const {
 
             float* data_out = default_data_alloc();
 
-            float* tPtr = data;
+            const float* tPtr = assume_aligned(data);
+            const float* oPtr = assume_aligned(other.data);
             float* outPtr = data_out;
-            float* oPtr = other.data;
 
             //SIMD Loop: will iterate over rows (contigous) and add vector, with a scalar cleanup
             for (size_t i = 0; i < dims[0]; ++i){
@@ -1116,9 +1118,9 @@ Matrix Matrix::add(const Matrix& other) const {
 
             float* data_out = default_data_alloc();
 
-            float* tPtr = data;
+            const float* tPtr = assume_aligned(data);
+            const float* oPtr = assume_aligned(other.data);
             float* outPtr = data_out;
-            float* oPtr = other.data;
 
             //Since cols are non contigous in row-major memory, loop makes use that each row will have the same float added to it.
             //Loop through rows, duplicating the corresponding float across one SIMD load and adding it. Scalar cleanup in end
@@ -1158,8 +1160,8 @@ Matrix Matrix::add(const Matrix& other) const {
 
         float* data_out = default_data_alloc();
         
-        const float* oPtr = other.data;
-        float* tPtr = data;
+        const float* tPtr = assume_aligned(data);
+        const float* oPtr = assume_aligned(other.data);
         float* outPtr = data_out;
 
         //Very simple SIMD loop, just loop over internal data array (row-major) and add.
@@ -1221,7 +1223,7 @@ Matrix Matrix::transpose2d() const {
 void Matrix::scmul_inplace(float s) {
 
     float32x4_t scalar = vdupq_n_f32(s);
-    float* tPtr = data;
+    float* tPtr = assume_aligned(data);
 
     for (size_t i = 0; i + 3 < data_len; i += 4) {
         float32x4_t t = vld1q_f32(tPtr);
@@ -1241,8 +1243,8 @@ void Matrix::emul_inplace(const Matrix& other) {
 
         if (other.get_dims_index(0) == dims[1]) {
 
-            float* tPtr = data;
-            float* oPtr = other.data;
+            float* tPtr = assume_aligned(data);
+            const float* oPtr = assume_aligned(other.data);
 
             for (size_t i = 0; i < dims[0]; ++i){
                 for (size_t j = 0; j + 3 < dims[1]; j += 4) {
@@ -1260,8 +1262,8 @@ void Matrix::emul_inplace(const Matrix& other) {
 
         } else if (other.get_dims_index(0) == dims[0]) {
 
-            float* tPtr = data;
-            float* oPtr = other.data;
+            float* tPtr = assume_aligned(data);
+            const float* oPtr = assume_aligned(other.data);
 
             for (size_t i = 0; i < dims[0]; ++i){
                 float vec_float = *oPtr;
@@ -1291,8 +1293,8 @@ void Matrix::emul_inplace(const Matrix& other) {
             }
         }
         
-        const float* oPtr = other.data;
-        float* tPtr = data;
+        const float* oPtr = assume_aligned(other.data);
+        float* tPtr = assume_aligned(data);
 
         for (size_t i = 0; i + 3 < data_len; i += 4) {
 
@@ -1317,8 +1319,8 @@ void Matrix::add_inplace(const Matrix& other) {
 
         if (other.get_dims_index(0) == dims[1]) { //Add row to cols
 
-            float* tPtr = data;
-            float* oPtr = other.data;
+            float* tPtr = assume_aligned(data);
+            const float* oPtr = assume_aligned(other.data);
 
             //Dont do tiling to match rest of add, can do in future.
             for (size_t i = 0; i < dims[0]; ++i){
@@ -1337,8 +1339,8 @@ void Matrix::add_inplace(const Matrix& other) {
 
         } else if (other.get_dims_index(0) == dims[0]) { //Add col to rows
 
-            float* tPtr = data;
-            float* oPtr = other.data;
+            float* tPtr = assume_aligned(data);
+            const float* oPtr = assume_aligned(other.data);
 
             //Dont do tiling to match rest of add, can do in future.
             for (size_t i = 0; i < dims[0]; ++i){
@@ -1369,8 +1371,8 @@ void Matrix::add_inplace(const Matrix& other) {
             }
         }
         
-        const float* oPtr = other.data;
-        float* tPtr = data;
+        const float* oPtr = assume_aligned(other.data);
+        float* tPtr = assume_aligned(data);
 
         for (size_t i = 0; i + 3 < data_len; i += 4) {
 
@@ -1403,7 +1405,7 @@ Matrix Matrix::sum_rows() const {
 
         float* data_out = float_size_alloc(dims[1]);
 
-        float* tPtr = data;
+        const float* tPtr = data;
         float* outPtr = data_out;
 
         //Loop through all cols by 4, using SIMD to add all rows (since rows are contigous)
@@ -1411,7 +1413,8 @@ Matrix Matrix::sum_rows() const {
             float32x4_t acc = vdupq_n_f32(0.0f);
             //Use the SIMD accumulator to add all rows for each stride of cols.
             for (size_t i = 0; i < dims[0]; ++i) {
-                float32x4_t tf = vld1q_f32(tPtr + i*dims[1] + j);
+                const float* ptr = assume_aligned(tPtr + i*dims[1] + j);
+                float32x4_t tf = vld1q_f32(ptr);
                 acc = vaddq_f32(acc, tf);
             }
             vst1q_f32(outPtr, acc);
@@ -1444,7 +1447,7 @@ Matrix Matrix::sum_cols() const {
 
         float* data_out = float_size_alloc(dims[0]);
 
-        float* tPtr = data;
+        const float* tPtr = assume_aligned(data);
         float* outPtr = data_out;
 
         //Loop through all rows, use SIMD to add since arrays are store in row-major format.
@@ -1477,7 +1480,7 @@ Matrix Matrix::sum_cols() const {
 
 //General - can improve in future to sum over a given axes, would require continous memory for given axes in order to use SIMD
 float Matrix::sum() const {
-    float* tPtr = data;
+    const float* tPtr = assume_aligned(data);
     float out = 0;
     float32x4_t acc = vdupq_n_f32(0.0f);
 
