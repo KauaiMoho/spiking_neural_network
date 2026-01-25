@@ -21,12 +21,12 @@ std::tuple<std::vector<Matrix>, std::vector<Matrix>> load_MNIST_data(bool train,
     std::ifstream labFile;
     int images = 0;
     if (train) {
-        imgFile = std::ifstream("data/train-images.idx3-ubyte", std::ios::binary);
-        labFile = std::ifstream("data/train-labels.idx1-ubyte", std::ios::binary);
+        imgFile = std::ifstream("/Users/karmaluitel/Desktop/Github/spiking_neural_network/data/train-images.idx3-ubyte", std::ios::binary);
+        labFile = std::ifstream("/Users/karmaluitel/Desktop/Github/spiking_neural_network/data/train-labels.idx1-ubyte", std::ios::binary);
         images = 60000;
     } else {
-        imgFile = std::ifstream("data/t10k-images.idx3-ubyte", std::ios::binary);
-        labFile = std::ifstream("data/t10k-labels.idx1-ubyte", std::ios::binary);
+        imgFile = std::ifstream("/Users/karmaluitel/Desktop/Github/spiking_neural_network/data/t10k-images.idx3-ubyte", std::ios::binary);
+        labFile = std::ifstream("/Users/karmaluitel/Desktop/Github/spiking_neural_network/data/t10k-labels.idx1-ubyte", std::ios::binary);
         images = 10000;
     }
 

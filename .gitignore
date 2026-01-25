@@ -7,3 +7,4 @@ external/
 data/
 *_bin
 *.s
+.DS_Store
