@@ -1,5 +1,5 @@
-#ifndef MATRIX_H
-#define MATRIX_H
+#ifndef test_matrix
+#define test_matrix
 #include <stdexcept>
 #include <iostream>
 #include <thread>
