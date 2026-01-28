@@ -34,8 +34,9 @@ private:
 
     std::tuple<int,int,int> get_matmul_tile(int n, int m, int k) const; // Get a tile size for a specific matix size. It will assume matrix dimensions are square for fitting into cache for simplicity.
     void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) const;
-    void matmul_cpu_batched(const float* A, const float* B, float* C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const;
-    void matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k) const;
+    void matmul_cpu_batched(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const;
+    void matmul_cpu_outer(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
+    void matmul_cpu(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
     void matmul_cpu_naive(const float* A, const float* B, float* C, int n, int m, int k) const; // For comparison.
 
 

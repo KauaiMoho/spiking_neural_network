@@ -392,11 +392,10 @@ int* Matrix::get_broadcasted_strides(const int* dims_new, int dim_len_new) const
 std::tuple<int,int,int> Matrix::get_matmul_tile(int n, int m, int k) const {
 
     //Use loop order to optimize L Cache loading.
-    //Use sysctl -a | grep cache to check Apple Silicon Cache Size
+    //Use t to check Apple Silicon Cache Size
 
-    //Can edit later to make this class specific
-    constexpr size_t L1_bytes = 64 * 1024;
-    constexpr size_t L2_bytes = 4 * 1024 * 1024;
+    constexpr size_t L1_bytes = 64 * 1024; // Efficiency cores
+    constexpr size_t L2_bytes = 4 * 1024 * 1024; //Shared between efficiency cores, 4mb
     constexpr int cache_line_size = 128;
 
     //Choose between L1 and L2 cache based on matrix size
@@ -444,7 +443,7 @@ std::tuple<int,int,int> Matrix::get_matmul_tile(int n, int m, int k) const {
     return  std::make_tuple(T_n, T_m, T_k);
 }
 
-void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const {
+void Matrix::matmul_cpu_batched(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const {
 
     std::tuple<int, int, int> tile_data = get_matmul_tile(n, m, k);
     int T_n = std::get<0>(tile_data);
@@ -460,37 +459,37 @@ void Matrix::matmul_cpu_batched(const float* A, const float* B, float* C, const 
     // 1. Transposing allows for contiguous reading of columns for matrix B (due to storage in row-major), which avoids cache misses.
     // 2. Contiguous reading allows for direct vectorization, as SIMD loads require it.
     simd_transpose(B, B_t, m, k, z, other_dists);
-
-    for (size_t ic = 0; ic < n; ic += T_n) { // Loop over all output tile rows
-        for (size_t lc = 0; lc < k; lc += T_k){ // Loop over all output tile cols for a given row
-            size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
-            for (size_t i = ic; i < iE; ++i) {
+    for (size_t ic = 0; ic < n; ic += T_n) {
+        size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
+        for (size_t jc = 0; jc < m; jc += T_m) {
+            size_t jE = std::min(jc + T_m, static_cast<size_t>(m));
+            for (size_t lc = 0; lc < k; lc += T_k) {
                 size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
-                for (size_t l = lc; l < lE; ++l) {
-                    float sum = 0;
-                    float32x4_t acc = vdupq_n_f32(0.0f);
-                    for (size_t jc = 0; jc < m; jc += T_m) { // Loop over shared dimension m, using SIMD to calculate dot product and store.
-                        size_t jE = std::min(jc + T_m, static_cast<size_t>(m));
-
-                        //Broadcasted strides will have a dimension of 0 in strides, allowing for still efficient cache usage
+                for (size_t i = ic; i < iE; ++i) {
+                    for (size_t l = lc; l < lE; ++l) {
+                        float sum = 0;
+                        float32x4_t acc = vdupq_n_f32(0.0f);
                         const float* ptrA = &A[z*this_dists[0] + i*this_dists[1] + jc*this_dists[2]];
-                        float* ptrB = &B_t[l*m + jc];
-                        for (size_t j = jc; j + 3 < jE; j += 4) {
+                        const float* ptrB = &B_t[l*m + jc];
+
+                        size_t j = jc;
+                        for (; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
                             ptrA += 4 * this_dists[2];
                             ptrB += 4;
-                            acc = vaddq_f32(acc, vmulq_f32(a, b));
+                            acc = vfmaq_f32(acc, a, b);
                         }
-                        for (size_t j = 0; j < (jE%4); ++j) {
+                        for (; j < jE; ++j) {
                             sum += (*ptrA) * (*ptrB);
                             ptrA += this_dists[2];
                             ptrB += 1;
                         }
+
+                        sum += vaddvq_f32(acc);
+                        C[n*k*z + i*k + l] = sum;
                     }
-                    sum += vaddvq_f32(acc);
-                    C[n*k*z + i*k + l] = sum;
-                }   
+                }
             }
         }
     }
@@ -502,7 +501,7 @@ void Matrix::matmul_cuda(const float* A, const float* B, float* C, int n, int m,
     //::matmul_cuda(A, B, C, n, m, k);
 }
 
-void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, int k) const {
+void Matrix::matmul_cpu_outer(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
 
     //A = nxm
     //B = mxk
@@ -510,44 +509,105 @@ void Matrix::matmul_cpu(const float* A, const float* B, float* C, int n, int m, 
     //Stride A = m
     //Stride B = k
     //Stride C = k
-    //Assume matrix dimensions near square for cache optimization simplicity.
-   
+
+    std::tuple<int, int, int> tile_data = get_matmul_tile(n, m, k);
+    int T_n = std::get<0>(tile_data);
+    int T_m = std::get<1>(tile_data); //shared dim
+    int T_k = std::get<2>(tile_data);
+
+    float* A_t = float_size_alloc(n * m);
+
+    memset(C, 0, n * k * sizeof(float));
+
+    simd_transpose(A, A_t, n, m);
+    for (size_t jc = 0; jc < m; jc += T_m) {
+            size_t jE = std::min(jc + T_m, static_cast<size_t>(m));
+            for (size_t ic = 0; ic < n; ic += T_n) {
+                size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
+                for (size_t lc = 0; lc < k; lc += T_k) {
+                    size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
+
+
+                    for (size_t j = jc; j < jE; ++j) { // m
+                        for (size_t i = ic; i < iE; ++i) { //n
+
+                        float aVal = A_t[j*n + i];// Contiguous in memory now, so better cache usage.
+                        float32x4_t a = vdupq_n_f32(aVal); //get value of A, dupe across lanes
+                        const float* ptrB = &B[j*k + lc]; 
+                        float* ptrC = &C[i*k + lc];
+                        
+                        size_t l = lc;
+                        for (; l + 3 < lE; l += 4) {
+                            float32x4_t b = vld1q_f32(ptrB);
+                            float32x4_t c = vld1q_f32(ptrC);
+                            c = vmlaq_f32(c, a, b);
+                            vst1q_f32(ptrC, c);
+                            ptrB += 4;
+                            ptrC += 4;
+                        }
+
+                        //Scalar edge case handling
+                        for (; l < (lE - lc); ++l) {
+                            (*ptrC) += aVal * (*ptrB);
+                            ptrB += 1;
+                            ptrC += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    free(A_t);
+}
+
+void Matrix::matmul_cpu(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
+
+    //A = nxm
+    //B = mxk
+    //C = nxk
+    //Stride A = m
+    //Stride B = k
+    //Stride C = k
+
     std::tuple<int, int, int> tile_data = get_matmul_tile(n, m, k);
     int T_n = std::get<0>(tile_data);
     int T_m = std::get<1>(tile_data); //shared dim
     int T_k = std::get<2>(tile_data);
 
     float* B_t = float_size_alloc(m * k);
-    
+
     simd_transpose(B, B_t, m, k);
     for (size_t ic = 0; ic < n; ic += T_n) {
-        for (size_t lc = 0; lc < k; lc += T_k){
-            size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
-            for (size_t i = ic; i < iE; ++i){
+        size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
+        for (size_t jc = 0; jc < m; jc += T_m) {
+            size_t jE = std::min(jc + T_m, static_cast<size_t>(m));
+            for (size_t lc = 0; lc < k; lc += T_k) {
                 size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
-                for (size_t l = lc; l < lE; ++l) {
-                    float sum = 0;
-                    float32x4_t acc = vdupq_n_f32(0.0f);
-                    for (size_t jc = 0; jc < m; jc += T_m) {
-                        size_t jE =  std::min(jc + T_m, static_cast<size_t>(m));
+                for (size_t i = ic; i < iE; ++i) {
+                    for (size_t l = lc; l < lE; ++l) {
+                        float sum = 0;
+                        float32x4_t acc = vdupq_n_f32(0.0f);
                         const float* ptrA = &A[i*m + jc];
-                        float* ptrB = &B_t[l*m + jc];
-                        for (size_t j = jc; j + 3 < jE; j += 4) {
+                        const float* ptrB = &B_t[l*m + jc];
+
+                        size_t j = jc;
+                        for (; j + 3 < jE; j += 4) {
                             float32x4_t a = vld1q_f32(ptrA);
                             float32x4_t b = vld1q_f32(ptrB);
                             ptrA += 4;
                             ptrB += 4;
-                            acc = vaddq_f32(acc, vmulq_f32(a, b));
+                            acc = vfmaq_f32(acc, a, b);
                         }
-                        for (size_t j = 0; j < (jE%4); ++j) {
+                        for (; j < jE; ++j) {
                             sum += (*ptrA) * (*ptrB);
                             ptrA += 1;
                             ptrB += 1;
                         }
+
+                        sum += vaddvq_f32(acc);
+                        C[i*k + l] = sum;
                     }
-                    sum += vaddvq_f32(acc);
-                    C[i*k + l] = sum;
-                }   
+                }
             }
         }
     }
@@ -705,7 +765,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
                     float32x4_t b = vld1q_f32(tPtr);
                     oPtr += 4;
                     tPtr += 4;
-                    acc = vaddq_f32(acc, vmulq_f32(a, b));
+                    acc = vfmaq_f32(acc, a, b);
                 }
                 for (size_t j = 0; j < (jE%4); ++j) {
                     data_out += (*oPtr) * (*tPtr);
@@ -745,7 +805,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
                             float32x4_t b = vld1q_f32(ptrB);
                             ptrA += 4;
                             ptrB += 4;
-                            acc = vaddq_f32(acc, vmulq_f32(a, b));
+                            acc = vfmaq_f32(acc, a, b);
                         }
                         for (size_t j = 0; j < (jE%4); ++j) {
                             sum += (*ptrA) * (*ptrB);
@@ -797,7 +857,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
                             float32x4_t b = vld1q_f32(ptrB);
                             ptrA += 4;
                             ptrB += 4;
-                            acc = vaddq_f32(acc, vmulq_f32(a, b));
+                            acc = vfmaq_f32(acc, a, b);
                         }
                         for (size_t j = 0; j < (jE%4); ++j) {
                             sum += (*ptrA) * (*ptrB);
@@ -831,9 +891,8 @@ Matrix Matrix::matmul(const Matrix& other) const {
                 matmul_cuda(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             } else {
                 
-                matmul_cpu(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
-
-                //For testing, comment out for real improvments.
+                //matmul_cpu(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+                matmul_cpu_outer(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
                 //matmul_cpu_naive(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             }
             Matrix ret = Matrix(new_dims, 2, data_out, false);
