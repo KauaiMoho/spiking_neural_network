@@ -392,7 +392,7 @@ int* Matrix::get_broadcasted_strides(const int* dims_new, int dim_len_new) const
 std::tuple<int,int,int> Matrix::get_matmul_tile(int n, int m, int k) const {
 
     //Use loop order to optimize L Cache loading.
-    //Use t to check Apple Silicon Cache Size
+    //Use sysctl -a | grep cache to check Apple Silicon Cache Size
 
     constexpr size_t L1_bytes = 64 * 1024; // Efficiency cores
     constexpr size_t L2_bytes = 4 * 1024 * 1024; //Shared between efficiency cores, 4mb
