@@ -394,8 +394,8 @@ std::tuple<int,int,int> Matrix::get_matmul_tile(int n, int m, int k) const {
     //Use loop order to optimize L Cache loading.
     //Use sysctl -a | grep cache to check Apple Silicon Cache Size
 
-    constexpr size_t L1_bytes = 64 * 1024; // Efficiency cores
-    constexpr size_t L2_bytes = 4 * 1024 * 1024; //Shared between efficiency cores, 4mb
+    constexpr size_t L1_bytes = 128 * 1024; // Performance cores
+    constexpr size_t L2_bytes = 16 * 1024 * 1024;
     constexpr int cache_line_size = 128;
 
     //Choose between L1 and L2 cache based on matrix size
@@ -411,13 +411,21 @@ std::tuple<int,int,int> Matrix::get_matmul_tile(int n, int m, int k) const {
     size_t usable_cache_floats = usable_cache_bytes / sizeof(float);
 
     //Use a heuristic (1/3 of available space for shared dim, assuming near square), and make the other two tile dims porportional to their size
-    //T_n*T_m + T_m*T_k + T_n*T_k = usable_cache_floats - need to solve this
+    // m * (Tn + Tk) = usable_cache_floats
+    // (Tn + Tk) = usable_cache_floats / m
+    // (( T_k * ratio) + Tk) = usable_cache_floats / m (Heuristic to solve impossible equasion)
 
-    // tile_size^2 * 3 = cache size
+    float ratio = static_cast<float>(n) / k;
+    
+    int T_m;
+    if (m * sizeof(float) < (L2_bytes / 4)) {
+        T_m = m;
+    } else {
+        T_m = 1024;
+    }
 
-    int T_n = static_cast<int>(sqrt((usable_cache_floats * n) / (3.0 * k)));
-    int T_m = static_cast<int>(sqrt(usable_cache_floats / 3.0));
-    int T_k = static_cast<int>(sqrt((usable_cache_floats * k) / (3.0 * n)));
+    int T_k = static_cast<int>((usable_cache_floats / (m * (1.0 + ratio))));
+    int T_n = static_cast<int>(T_k * ratio);
 
     //Now we round down to cache line size. Could use bit masking since cache line power of 2 (originally i did this, but changed back for clarity): mat_tile & ~(cache_line_floats - 1)
     //We do this to make sure all cache line data loads are perfectly used, and round down to make sure we do not exceed usable cache size.
@@ -425,19 +433,18 @@ std::tuple<int,int,int> Matrix::get_matmul_tile(int n, int m, int k) const {
     T_m -= T_m%cache_line_floats;
     T_k -= T_k%cache_line_floats;
     
-    if (T_n == 0) {
+    if (T_n <= 0) {
         //If tile size is small, stick with cache line float size.
         T_n = cache_line_floats;
     }
 
-    if (T_m == 0) {
+    if (T_m <= 0) {
         T_m = cache_line_floats;
     }
 
-    if (T_k == 0) {
+    if (T_k <= 0) {
         T_k = cache_line_floats;
     }
-
 
     //Now we will only work with sub matrices of size mat_tile, which is good as it will allow the matmul code to always pull/write straight from CPU cache, avoiding slower memory access.
     return  std::make_tuple(T_n, T_m, T_k);
@@ -447,7 +454,6 @@ void Matrix::matmul_cpu_batched(const float* __restrict__ A, const float* __rest
 
     std::tuple<int, int, int> tile_data = get_matmul_tile(n, m, k);
     int T_n = std::get<0>(tile_data);
-    int T_m = std::get<1>(tile_data); //shared dim
     int T_k = std::get<2>(tile_data);
 
     float* B_t = float_size_alloc(m * k);
@@ -461,34 +467,29 @@ void Matrix::matmul_cpu_batched(const float* __restrict__ A, const float* __rest
     simd_transpose(B, B_t, m, k, z, other_dists);
     for (size_t ic = 0; ic < n; ic += T_n) {
         size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
-        for (size_t jc = 0; jc < m; jc += T_m) {
-            size_t jE = std::min(jc + T_m, static_cast<size_t>(m));
-            for (size_t lc = 0; lc < k; lc += T_k) {
-                size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
-                for (size_t i = ic; i < iE; ++i) {
-                    for (size_t l = lc; l < lE; ++l) {
-                        float sum = 0;
-                        float32x4_t acc = vdupq_n_f32(0.0f);
-                        const float* ptrA = &A[z*this_dists[0] + i*this_dists[1] + jc*this_dists[2]];
-                        const float* ptrB = &B_t[l*m + jc];
+        for (size_t lc = 0; lc < k; lc += T_k) {
+            size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
+            for (size_t i = ic; i < iE; ++i) {
+                for (size_t l = lc; l < lE; ++l) {
 
-                        size_t j = jc;
-                        for (; j + 3 < jE; j += 4) {
-                            float32x4_t a = vld1q_f32(ptrA);
-                            float32x4_t b = vld1q_f32(ptrB);
-                            ptrA += 4 * this_dists[2];
-                            ptrB += 4;
-                            acc = vfmaq_f32(acc, a, b);
-                        }
-                        for (; j < jE; ++j) {
-                            sum += (*ptrA) * (*ptrB);
-                            ptrA += this_dists[2];
-                            ptrB += 1;
-                        }
+                    float sum = 0;
+                    float32x4_t acc = vdupq_n_f32(0.0f);
 
-                        sum += vaddvq_f32(acc);
-                        C[n*k*z + i*k + l] = sum;
+                    const float* ptrA = &A[z*this_dists[0] + i*this_dists[1]];
+                    const float* ptrB = &B_t[l*m];
+
+                    size_t j = 0;
+                    for (; j + 3 < m; j += 4) {
+                        float32x4_t a = vld1q_f32(ptrA + j*this_dists[2]);
+                        float32x4_t b = vld1q_f32(ptrB + j);
+                        acc = vfmaq_f32(acc, a, b);
                     }
+                    for (; j < m; ++j) {
+                        sum += ptrA[j*this_dists[2]] * ptrB[j];
+                    }
+
+                    sum += vaddvq_f32(acc);
+                    C[n*k*z + i*k + l] = sum;
                 }
             }
         }
@@ -560,6 +561,102 @@ void Matrix::matmul_cpu_outer(const float* __restrict__ A, const float* __restri
     free(A_t);
 }
 
+void Matrix::matmul_cpu_unrolled(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
+
+    //A = nxm
+    //B = mxk
+    //C = nxk
+    //Stride A = m
+    //Stride B = k
+    //Stride C = k
+
+    std::tuple<int, int, int> tile_data = get_matmul_tile(n, m, k);
+    int T_n = std::get<0>(tile_data);
+    int T_k = std::get<2>(tile_data);
+
+    float* B_t = float_size_alloc(m * k);
+
+    simd_transpose(B, B_t, m, k);
+
+    for (size_t ic = 0; ic < n; ic += T_n) {
+        size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
+        for (size_t lc = 0; lc < k; lc += T_k) {
+            size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
+                for (size_t i = ic; i < iE; ++i) { 
+
+                    size_t l = lc;
+                    for (; l + 3 < lE; l += 4) { //Better use of A, use it 4 times before reload
+
+                        float32x4_t acc0 = vdupq_n_f32(0.0f);
+                        float32x4_t acc1 = vdupq_n_f32(0.0f);
+                        float32x4_t acc2 = vdupq_n_f32(0.0f);
+                        float32x4_t acc3 = vdupq_n_f32(0.0f);
+
+                        const float* ptrA = &A[i*m];
+                        const float* ptrB0 = &B_t[l*m];
+                        const float* ptrB1 = &B_t[(l+1)*m];
+                        const float* ptrB2 = &B_t[(l+2)*m];
+                        const float* ptrB3 = &B_t[(l+3)*m];
+
+                        size_t j = 0;
+                        for (; j + 3 < m; j += 4) {
+
+                            float32x4_t a = vld1q_f32(ptrA + j);
+
+                            acc0 = vfmaq_f32(acc0, a, vld1q_f32(ptrB0 + j));
+                            acc1 = vfmaq_f32(acc1, a, vld1q_f32(ptrB1 + j));
+                            acc2 = vfmaq_f32(acc2, a, vld1q_f32(ptrB2 + j));
+                            acc3 = vfmaq_f32(acc3, a, vld1q_f32(ptrB3 + j));
+                        }
+
+                        float s0 = vaddvq_f32(acc0);
+                        float s1 = vaddvq_f32(acc1);
+                        float s2 = vaddvq_f32(acc2);
+                        float s3 = vaddvq_f32(acc3);
+
+                        for (; j < m; ++j) {
+                            float a_val = ptrA[j];
+                            s0 += a_val * ptrB0[j];
+                            s1 += a_val * ptrB1[j];
+                            s2 += a_val * ptrB2[j];
+                            s3 += a_val * ptrB3[j];
+                        }
+
+                        C[i * k + (l + 0)] = s0;
+                        C[i * k + (l + 1)] = s1;
+                        C[i * k + (l + 2)] = s2;
+                        C[i * k + (l + 3)] = s3;
+                    }
+
+                    for (; l < lE; ++l) { // matmul_cpu handling
+
+                        float32x4_t acc = vdupq_n_f32(0.0f);
+
+                        float sum = 0;
+
+                        const float* ptrA = &A[i*m];
+                        const float* ptrB = &B_t[l*m];
+
+                        size_t j = 0;
+                        for (; j + 3 < m; j += 4) {
+                            float32x4_t a = vld1q_f32(ptrA + j);
+                            float32x4_t b = vld1q_f32(ptrB + j);
+                            acc = vfmaq_f32(acc, a, b);
+                        }
+                        for (; j < m; ++j) {
+                            sum += ptrA[j] * ptrB[j];
+                        }
+
+                        sum += vaddvq_f32(acc);
+                        C[i*k + l] = sum;
+
+                    }
+                }
+        }
+    }
+    free(B_t);
+}
+
 void Matrix::matmul_cpu(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
 
     //A = nxm
@@ -571,42 +668,38 @@ void Matrix::matmul_cpu(const float* __restrict__ A, const float* __restrict__ B
 
     std::tuple<int, int, int> tile_data = get_matmul_tile(n, m, k);
     int T_n = std::get<0>(tile_data);
-    int T_m = std::get<1>(tile_data); //shared dim
     int T_k = std::get<2>(tile_data);
 
     float* B_t = float_size_alloc(m * k);
 
     simd_transpose(B, B_t, m, k);
+
     for (size_t ic = 0; ic < n; ic += T_n) {
         size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
-        for (size_t jc = 0; jc < m; jc += T_m) {
-            size_t jE = std::min(jc + T_m, static_cast<size_t>(m));
-            for (size_t lc = 0; lc < k; lc += T_k) {
-                size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
-                for (size_t i = ic; i < iE; ++i) {
-                    for (size_t l = lc; l < lE; ++l) {
-                        float sum = 0;
-                        float32x4_t acc = vdupq_n_f32(0.0f);
-                        const float* ptrA = &A[i*m + jc];
-                        const float* ptrB = &B_t[l*m + jc];
+        for (size_t lc = 0; lc < k; lc += T_k) {
+            size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
+            for (size_t i = ic; i < iE; ++i) {
+                for (size_t l = lc; l < lE; ++l) {
 
-                        size_t j = jc;
-                        for (; j + 3 < jE; j += 4) {
-                            float32x4_t a = vld1q_f32(ptrA);
-                            float32x4_t b = vld1q_f32(ptrB);
-                            ptrA += 4;
-                            ptrB += 4;
-                            acc = vfmaq_f32(acc, a, b);
-                        }
-                        for (; j < jE; ++j) {
-                            sum += (*ptrA) * (*ptrB);
-                            ptrA += 1;
-                            ptrB += 1;
-                        }
+                    float32x4_t acc = vdupq_n_f32(0.0f);
 
-                        sum += vaddvq_f32(acc);
-                        C[i*k + l] = sum;
+                    float sum = 0;
+
+                    const float* ptrA = &A[i*m];
+                    const float* ptrB = &B_t[l*m];
+
+                    size_t j = 0;
+                    for (; j + 3 < m; j += 4) {
+                        float32x4_t a = vld1q_f32(ptrA + j);
+                        float32x4_t b = vld1q_f32(ptrB + j);
+                        acc = vfmaq_f32(acc, a, b);
                     }
+                    for (; j < m; ++j) {
+                        sum += ptrA[j] * ptrB[j];
+                    }
+
+                    sum += vaddvq_f32(acc);
+                    C[i*k + l] = sum;
                 }
             }
         }
@@ -891,8 +984,10 @@ Matrix Matrix::matmul(const Matrix& other) const {
                 matmul_cuda(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             } else {
                 
+                //Switch between different matmul alg's for profiling.
+                matmul_cpu_unrolled(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
                 //matmul_cpu(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
-                matmul_cpu_outer(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+                //matmul_cpu_outer(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
                 //matmul_cpu_naive(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             }
             Matrix ret = Matrix(new_dims, 2, data_out, false);

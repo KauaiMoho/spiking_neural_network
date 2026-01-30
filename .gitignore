@@ -5,6 +5,6 @@ program
 matrix_tests
 external/
 data/
-*_bin
+*_bin*
 *.s
 .DS_Store
