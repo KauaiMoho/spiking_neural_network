@@ -401,7 +401,7 @@ std::tuple<int,int,int> Matrix::get_matmul_tile(int n, int m, int k) const {
     //Choose between L1 and L2 cache based on matrix size
     size_t cache_line_floats = cache_line_size / sizeof(float);
     size_t usable_cache_bytes;
-    if (n * m * k * sizeof(float) <= L1_bytes) {
+    if (n * m * k * sizeof(float) <= L1_bytes) { // Heuristic, very conservative
         //Only use max 2/3 of the available bytes in a given cache.
         usable_cache_bytes = L1_bytes / 1.5;
     } else {
@@ -410,13 +410,15 @@ std::tuple<int,int,int> Matrix::get_matmul_tile(int n, int m, int k) const {
 
     size_t usable_cache_floats = usable_cache_bytes / sizeof(float);
 
-    //Use a heuristic (1/3 of available space for shared dim, assuming near square), and make the other two tile dims porportional to their size
+
+    //Assume T_m = m since we dont tile m for inner product.
     // m * (Tn + Tk) = usable_cache_floats
     // (Tn + Tk) = usable_cache_floats / m
     // (( T_k * ratio) + Tk) = usable_cache_floats / m (Heuristic to solve impossible equasion)
 
-    float ratio = static_cast<float>(n) / k;
+    float ratio = static_cast<float>(n) / (k * 2); // Ratio will give more tile space to T_k, since it is the more important dimension for inner product.
     
+    //Only used in outer product, placeholder (large tile, since what matters is the size of C (based on T_k/T_n))
     int T_m;
     if (m * sizeof(float) < (L2_bytes / 4)) {
         T_m = m;
@@ -470,12 +472,12 @@ void Matrix::matmul_cpu_batched(const float* __restrict__ A, const float* __rest
         for (size_t lc = 0; lc < k; lc += T_k) {
             size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
             for (size_t i = ic; i < iE; ++i) {
+                const float* ptrA = &A[z*this_dists[0] + i*this_dists[1]];
                 for (size_t l = lc; l < lE; ++l) {
 
                     float sum = 0;
                     float32x4_t acc = vdupq_n_f32(0.0f);
 
-                    const float* ptrA = &A[z*this_dists[0] + i*this_dists[1]];
                     const float* ptrB = &B_t[l*m];
 
                     size_t j = 0;
@@ -561,7 +563,7 @@ void Matrix::matmul_cpu_outer(const float* __restrict__ A, const float* __restri
     free(A_t);
 }
 
-void Matrix::matmul_cpu_unrolled(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
+void Matrix::matmul_cpu_unrolled_16x(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
 
     //A = nxm
     //B = mxk
@@ -585,14 +587,195 @@ void Matrix::matmul_cpu_unrolled(const float* __restrict__ A, const float* __res
                 for (size_t i = ic; i < iE; ++i) { 
 
                     size_t l = lc;
-                    for (; l + 3 < lE; l += 4) { //Better use of A, use it 4 times before reload
+                    const float* ptrA = &A[i*m];
+
+                    for (; l + 15 < lE; l += 16) {
+
+                        float32x4_t acc0  = vdupq_n_f32(0.0f);
+                        float32x4_t acc1  = vdupq_n_f32(0.0f);
+                        float32x4_t acc2  = vdupq_n_f32(0.0f);
+                        float32x4_t acc3  = vdupq_n_f32(0.0f);
+                        float32x4_t acc4  = vdupq_n_f32(0.0f);
+                        float32x4_t acc5  = vdupq_n_f32(0.0f);
+                        float32x4_t acc6  = vdupq_n_f32(0.0f);
+                        float32x4_t acc7  = vdupq_n_f32(0.0f);
+                        float32x4_t acc8  = vdupq_n_f32(0.0f);
+                        float32x4_t acc9  = vdupq_n_f32(0.0f);
+                        float32x4_t acc10 = vdupq_n_f32(0.0f);
+                        float32x4_t acc11 = vdupq_n_f32(0.0f);
+                        float32x4_t acc12 = vdupq_n_f32(0.0f);
+                        float32x4_t acc13 = vdupq_n_f32(0.0f);
+                        float32x4_t acc14 = vdupq_n_f32(0.0f);
+                        float32x4_t acc15 = vdupq_n_f32(0.0f);
+
+                        const float* ptrB0  = &B_t[(l)  * m];
+                        const float* ptrB1  = &B_t[(l + 1)  * m];
+                        const float* ptrB2  = &B_t[(l + 2)  * m];
+                        const float* ptrB3  = &B_t[(l + 3)  * m];
+                        const float* ptrB4  = &B_t[(l + 4)  * m];
+                        const float* ptrB5  = &B_t[(l + 5)  * m];
+                        const float* ptrB6  = &B_t[(l + 6)  * m];
+                        const float* ptrB7  = &B_t[(l + 7)  * m];
+                        const float* ptrB8  = &B_t[(l + 8)  * m];
+                        const float* ptrB9  = &B_t[(l + 9)  * m];
+                        const float* ptrB10 = &B_t[(l + 10) * m];
+                        const float* ptrB11 = &B_t[(l + 11) * m];
+                        const float* ptrB12 = &B_t[(l + 12) * m];
+                        const float* ptrB13 = &B_t[(l + 13) * m];
+                        const float* ptrB14 = &B_t[(l + 14) * m];
+                        const float* ptrB15 = &B_t[(l + 15) * m];
+
+                        size_t j = 0;
+                        for (; j + 3 < m; j += 4) {
+
+                            float32x4_t a = vld1q_f32(ptrA + j);
+
+                            acc0  = vfmaq_f32(acc0,  a, vld1q_f32(ptrB0  + j));
+                            acc1  = vfmaq_f32(acc1,  a, vld1q_f32(ptrB1  + j));
+                            acc2  = vfmaq_f32(acc2,  a, vld1q_f32(ptrB2  + j));
+                            acc3  = vfmaq_f32(acc3,  a, vld1q_f32(ptrB3  + j));
+                            acc4  = vfmaq_f32(acc4,  a, vld1q_f32(ptrB4  + j));
+                            acc5  = vfmaq_f32(acc5,  a, vld1q_f32(ptrB5  + j));
+                            acc6  = vfmaq_f32(acc6,  a, vld1q_f32(ptrB6  + j));
+                            acc7  = vfmaq_f32(acc7,  a, vld1q_f32(ptrB7  + j));
+                            acc8  = vfmaq_f32(acc8,  a, vld1q_f32(ptrB8  + j));
+                            acc9  = vfmaq_f32(acc9,  a, vld1q_f32(ptrB9  + j));
+                            acc10 = vfmaq_f32(acc10, a, vld1q_f32(ptrB10 + j));
+                            acc11 = vfmaq_f32(acc11, a, vld1q_f32(ptrB11 + j));
+                            acc12 = vfmaq_f32(acc12, a, vld1q_f32(ptrB12 + j));
+                            acc13 = vfmaq_f32(acc13, a, vld1q_f32(ptrB13 + j));
+                            acc14 = vfmaq_f32(acc14, a, vld1q_f32(ptrB14 + j));
+                            acc15 = vfmaq_f32(acc15, a, vld1q_f32(ptrB15 + j));
+                        }
+
+                        float s0  = vaddvq_f32(acc0);
+                        float s1  = vaddvq_f32(acc1);
+                        float s2  = vaddvq_f32(acc2);
+                        float s3  = vaddvq_f32(acc3);
+                        float s4  = vaddvq_f32(acc4);
+                        float s5  = vaddvq_f32(acc5);
+                        float s6  = vaddvq_f32(acc6);
+                        float s7  = vaddvq_f32(acc7);
+                        float s8  = vaddvq_f32(acc8);
+                        float s9  = vaddvq_f32(acc9);
+                        float s10 = vaddvq_f32(acc10);
+                        float s11 = vaddvq_f32(acc11);
+                        float s12 = vaddvq_f32(acc12);
+                        float s13 = vaddvq_f32(acc13);
+                        float s14 = vaddvq_f32(acc14);
+                        float s15 = vaddvq_f32(acc15);
+
+                        for (; j < m; ++j) {
+                            float a_val = ptrA[j];
+                            s0  += a_val * ptrB0[j];
+                            s1  += a_val * ptrB1[j];
+                            s2  += a_val * ptrB2[j];
+                            s3  += a_val * ptrB3[j];
+                            s4  += a_val * ptrB4[j];
+                            s5  += a_val * ptrB5[j];
+                            s6  += a_val * ptrB6[j];
+                            s7  += a_val * ptrB7[j];
+                            s8  += a_val * ptrB8[j];
+                            s9  += a_val * ptrB9[j];
+                            s10 += a_val * ptrB10[j];
+                            s11 += a_val * ptrB11[j];
+                            s12 += a_val * ptrB12[j];
+                            s13 += a_val * ptrB13[j];
+                            s14 += a_val * ptrB14[j];
+                            s15 += a_val * ptrB15[j];
+                        }
+
+                        C[i * k + (l)]  = s0;
+                        C[i * k + (l + 1)]  = s1;
+                        C[i * k + (l + 2)]  = s2;
+                        C[i * k + (l + 3)]  = s3;
+                        C[i * k + (l + 4)]  = s4;
+                        C[i * k + (l + 5)]  = s5;
+                        C[i * k + (l + 6)]  = s6;
+                        C[i * k + (l + 7)]  = s7;
+                        C[i * k + (l + 8)]  = s8;
+                        C[i * k + (l + 9)]  = s9;
+                        C[i * k + (l + 10)] = s10;
+                        C[i * k + (l + 11)] = s11;
+                        C[i * k + (l + 12)] = s12;
+                        C[i * k + (l + 13)] = s13;
+                        C[i * k + (l + 14)] = s14;
+                        C[i * k + (l + 15)] = s15;
+                    }
+
+                    for (; l + 7 < lE; l += 8) { //Better use of A, use it 4 times before reload
+
+                        float32x4_t acc0 = vdupq_n_f32(0.0f);
+                        float32x4_t acc1 = vdupq_n_f32(0.0f);
+                        float32x4_t acc2 = vdupq_n_f32(0.0f);
+                        float32x4_t acc3 = vdupq_n_f32(0.0f);
+                        float32x4_t acc4 = vdupq_n_f32(0.0f);
+                        float32x4_t acc5 = vdupq_n_f32(0.0f);
+                        float32x4_t acc6 = vdupq_n_f32(0.0f);
+                        float32x4_t acc7 = vdupq_n_f32(0.0f);
+
+                        const float* ptrB0 = &B_t[l*m];
+                        const float* ptrB1 = &B_t[(l+1)*m];
+                        const float* ptrB2 = &B_t[(l+2)*m];
+                        const float* ptrB3 = &B_t[(l+3)*m];
+                        const float* ptrB4 = &B_t[(l+4)*m];
+                        const float* ptrB5 = &B_t[(l+5)*m];
+                        const float* ptrB6 = &B_t[(l+6)*m];
+                        const float* ptrB7 = &B_t[(l+7)*m];
+
+                        size_t j = 0;
+                        for (; j + 3 < m; j += 4) {
+
+                            float32x4_t a = vld1q_f32(ptrA + j);
+
+                            acc0 = vfmaq_f32(acc0, a, vld1q_f32(ptrB0 + j));
+                            acc1 = vfmaq_f32(acc1, a, vld1q_f32(ptrB1 + j));
+                            acc2 = vfmaq_f32(acc2, a, vld1q_f32(ptrB2 + j));
+                            acc3 = vfmaq_f32(acc3, a, vld1q_f32(ptrB3 + j));
+                            acc4 = vfmaq_f32(acc4, a, vld1q_f32(ptrB4 + j));
+                            acc5 = vfmaq_f32(acc5, a, vld1q_f32(ptrB5 + j));
+                            acc6 = vfmaq_f32(acc6, a, vld1q_f32(ptrB6 + j));
+                            acc7 = vfmaq_f32(acc7, a, vld1q_f32(ptrB7 + j));
+                        }
+
+                        float s0 = vaddvq_f32(acc0);
+                        float s1 = vaddvq_f32(acc1);
+                        float s2 = vaddvq_f32(acc2);
+                        float s3 = vaddvq_f32(acc3);
+                        float s4 = vaddvq_f32(acc4);
+                        float s5 = vaddvq_f32(acc5);
+                        float s6 = vaddvq_f32(acc6);
+                        float s7 = vaddvq_f32(acc7);
+
+                        for (; j < m; ++j) {
+                            float a_val = ptrA[j];
+                            s0 += a_val * ptrB0[j];
+                            s1 += a_val * ptrB1[j];
+                            s2 += a_val * ptrB2[j];
+                            s3 += a_val * ptrB3[j];
+                            s4 += a_val * ptrB4[j];
+                            s5 += a_val * ptrB5[j];
+                            s6 += a_val * ptrB6[j];
+                            s7 += a_val * ptrB7[j];
+                        }
+
+                        C[i * k + (l)] = s0;
+                        C[i * k + (l + 1)] = s1;
+                        C[i * k + (l + 2)] = s2;
+                        C[i * k + (l + 3)] = s3;
+                        C[i * k + (l + 4)] = s4;
+                        C[i * k + (l + 5)] = s5;
+                        C[i * k + (l + 6)] = s6;
+                        C[i * k + (l + 7)] = s7;
+                    }
+
+                    for (; l + 3 < lE; l += 4) {
 
                         float32x4_t acc0 = vdupq_n_f32(0.0f);
                         float32x4_t acc1 = vdupq_n_f32(0.0f);
                         float32x4_t acc2 = vdupq_n_f32(0.0f);
                         float32x4_t acc3 = vdupq_n_f32(0.0f);
 
-                        const float* ptrA = &A[i*m];
                         const float* ptrB0 = &B_t[l*m];
                         const float* ptrB1 = &B_t[(l+1)*m];
                         const float* ptrB2 = &B_t[(l+2)*m];
@@ -622,7 +805,7 @@ void Matrix::matmul_cpu_unrolled(const float* __restrict__ A, const float* __res
                             s3 += a_val * ptrB3[j];
                         }
 
-                        C[i * k + (l + 0)] = s0;
+                        C[i * k + (l)] = s0;
                         C[i * k + (l + 1)] = s1;
                         C[i * k + (l + 2)] = s2;
                         C[i * k + (l + 3)] = s3;
@@ -633,8 +816,6 @@ void Matrix::matmul_cpu_unrolled(const float* __restrict__ A, const float* __res
                         float32x4_t acc = vdupq_n_f32(0.0f);
 
                         float sum = 0;
-
-                        const float* ptrA = &A[i*m];
                         const float* ptrB = &B_t[l*m];
 
                         size_t j = 0;
@@ -655,6 +836,299 @@ void Matrix::matmul_cpu_unrolled(const float* __restrict__ A, const float* __res
         }
     }
     free(B_t);
+}
+
+void Matrix::matmul_cpu_unrolled_8x(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
+
+    //A = nxm
+    //B = mxk
+    //C = nxk
+    //Stride A = m
+    //Stride B = k
+    //Stride C = k
+
+    std::tuple<int, int, int> tile_data = get_matmul_tile(n, m, k);
+    int T_n = std::get<0>(tile_data);
+    int T_k = std::get<2>(tile_data);
+
+    float* B_t = float_size_alloc(m * k);
+
+    simd_transpose(B, B_t, m, k);
+
+    for (size_t ic = 0; ic < n; ic += T_n) {
+        size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
+        for (size_t lc = 0; lc < k; lc += T_k) {
+            size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
+                for (size_t i = ic; i < iE; ++i) { 
+
+                    size_t l = lc;
+                    const float* ptrA = &A[i*m];
+
+                    for (; l + 7 < lE; l += 8) { //Better use of A, use it 4 times before reload
+
+                        float32x4_t acc0 = vdupq_n_f32(0.0f);
+                        float32x4_t acc1 = vdupq_n_f32(0.0f);
+                        float32x4_t acc2 = vdupq_n_f32(0.0f);
+                        float32x4_t acc3 = vdupq_n_f32(0.0f);
+                        float32x4_t acc4 = vdupq_n_f32(0.0f);
+                        float32x4_t acc5 = vdupq_n_f32(0.0f);
+                        float32x4_t acc6 = vdupq_n_f32(0.0f);
+                        float32x4_t acc7 = vdupq_n_f32(0.0f);
+
+                        const float* ptrB0 = &B_t[l*m];
+                        const float* ptrB1 = &B_t[(l+1)*m];
+                        const float* ptrB2 = &B_t[(l+2)*m];
+                        const float* ptrB3 = &B_t[(l+3)*m];
+                        const float* ptrB4 = &B_t[(l+4)*m];
+                        const float* ptrB5 = &B_t[(l+5)*m];
+                        const float* ptrB6 = &B_t[(l+6)*m];
+                        const float* ptrB7 = &B_t[(l+7)*m];
+
+                        size_t j = 0;
+                        for (; j + 3 < m; j += 4) {
+
+                            float32x4_t a = vld1q_f32(ptrA + j);
+
+                            acc0 = vfmaq_f32(acc0, a, vld1q_f32(ptrB0 + j));
+                            acc1 = vfmaq_f32(acc1, a, vld1q_f32(ptrB1 + j));
+                            acc2 = vfmaq_f32(acc2, a, vld1q_f32(ptrB2 + j));
+                            acc3 = vfmaq_f32(acc3, a, vld1q_f32(ptrB3 + j));
+                            acc4 = vfmaq_f32(acc4, a, vld1q_f32(ptrB4 + j));
+                            acc5 = vfmaq_f32(acc5, a, vld1q_f32(ptrB5 + j));
+                            acc6 = vfmaq_f32(acc6, a, vld1q_f32(ptrB6 + j));
+                            acc7 = vfmaq_f32(acc7, a, vld1q_f32(ptrB7 + j));
+                        }
+
+                        float s0 = vaddvq_f32(acc0);
+                        float s1 = vaddvq_f32(acc1);
+                        float s2 = vaddvq_f32(acc2);
+                        float s3 = vaddvq_f32(acc3);
+                        float s4 = vaddvq_f32(acc4);
+                        float s5 = vaddvq_f32(acc5);
+                        float s6 = vaddvq_f32(acc6);
+                        float s7 = vaddvq_f32(acc7);
+
+                        for (; j < m; ++j) {
+                            float a_val = ptrA[j];
+                            s0 += a_val * ptrB0[j];
+                            s1 += a_val * ptrB1[j];
+                            s2 += a_val * ptrB2[j];
+                            s3 += a_val * ptrB3[j];
+                            s4 += a_val * ptrB4[j];
+                            s5 += a_val * ptrB5[j];
+                            s6 += a_val * ptrB6[j];
+                            s7 += a_val * ptrB7[j];
+                        }
+
+                        C[i * k + (l)] = s0;
+                        C[i * k + (l + 1)] = s1;
+                        C[i * k + (l + 2)] = s2;
+                        C[i * k + (l + 3)] = s3;
+                        C[i * k + (l + 4)] = s4;
+                        C[i * k + (l + 5)] = s5;
+                        C[i * k + (l + 6)] = s6;
+                        C[i * k + (l + 7)] = s7;
+                    }
+
+                    for (; l + 3 < lE; l += 4) {
+
+                        float32x4_t acc0 = vdupq_n_f32(0.0f);
+                        float32x4_t acc1 = vdupq_n_f32(0.0f);
+                        float32x4_t acc2 = vdupq_n_f32(0.0f);
+                        float32x4_t acc3 = vdupq_n_f32(0.0f);
+
+                        const float* ptrB0 = &B_t[l*m];
+                        const float* ptrB1 = &B_t[(l+1)*m];
+                        const float* ptrB2 = &B_t[(l+2)*m];
+                        const float* ptrB3 = &B_t[(l+3)*m];
+
+                        size_t j = 0;
+                        for (; j + 3 < m; j += 4) {
+
+                            float32x4_t a = vld1q_f32(ptrA + j);
+
+                            acc0 = vfmaq_f32(acc0, a, vld1q_f32(ptrB0 + j));
+                            acc1 = vfmaq_f32(acc1, a, vld1q_f32(ptrB1 + j));
+                            acc2 = vfmaq_f32(acc2, a, vld1q_f32(ptrB2 + j));
+                            acc3 = vfmaq_f32(acc3, a, vld1q_f32(ptrB3 + j));
+                        }
+
+                        float s0 = vaddvq_f32(acc0);
+                        float s1 = vaddvq_f32(acc1);
+                        float s2 = vaddvq_f32(acc2);
+                        float s3 = vaddvq_f32(acc3);
+
+                        for (; j < m; ++j) {
+                            float a_val = ptrA[j];
+                            s0 += a_val * ptrB0[j];
+                            s1 += a_val * ptrB1[j];
+                            s2 += a_val * ptrB2[j];
+                            s3 += a_val * ptrB3[j];
+                        }
+
+                        C[i * k + (l)] = s0;
+                        C[i * k + (l + 1)] = s1;
+                        C[i * k + (l + 2)] = s2;
+                        C[i * k + (l + 3)] = s3;
+                    }
+
+                    for (; l < lE; ++l) { // matmul_cpu handling
+
+                        float32x4_t acc = vdupq_n_f32(0.0f);
+
+                        float sum = 0;
+                        const float* ptrB = &B_t[l*m];
+
+                        size_t j = 0;
+                        for (; j + 3 < m; j += 4) {
+                            float32x4_t a = vld1q_f32(ptrA + j);
+                            float32x4_t b = vld1q_f32(ptrB + j);
+                            acc = vfmaq_f32(acc, a, b);
+                        }
+                        for (; j < m; ++j) {
+                            sum += ptrA[j] * ptrB[j];
+                        }
+
+                        sum += vaddvq_f32(acc);
+                        C[i*k + l] = sum;
+
+                    }
+                }
+        }
+    }
+    free(B_t);
+}
+
+void Matrix::matmul_cpu_unrolled_4x(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
+
+    //A = nxm
+    //B = mxk
+    //C = nxk
+    //Stride A = m
+    //Stride B = k
+    //Stride C = k
+
+    std::tuple<int, int, int> tile_data = get_matmul_tile(n, m, k);
+    int T_n = std::get<0>(tile_data);
+    int T_k = std::get<2>(tile_data);
+
+    float* B_t = float_size_alloc(m * k);
+
+    simd_transpose(B, B_t, m, k);
+
+    for (size_t ic = 0; ic < n; ic += T_n) {
+        size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
+        for (size_t lc = 0; lc < k; lc += T_k) {
+            size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
+                for (size_t i = ic; i < iE; ++i) { 
+
+                    size_t l = lc;
+                    const float* ptrA = &A[i*m];
+
+                    for (; l + 3 < lE; l += 4) { //Better use of A, use it 4 times before reload
+
+                        float32x4_t acc0 = vdupq_n_f32(0.0f);
+                        float32x4_t acc1 = vdupq_n_f32(0.0f);
+                        float32x4_t acc2 = vdupq_n_f32(0.0f);
+                        float32x4_t acc3 = vdupq_n_f32(0.0f);
+
+                        const float* ptrB0 = &B_t[l*m];
+                        const float* ptrB1 = &B_t[(l+1)*m];
+                        const float* ptrB2 = &B_t[(l+2)*m];
+                        const float* ptrB3 = &B_t[(l+3)*m];
+
+                        size_t j = 0;
+                        for (; j + 3 < m; j += 4) {
+
+                            float32x4_t a = vld1q_f32(ptrA + j);
+
+                            acc0 = vfmaq_f32(acc0, a, vld1q_f32(ptrB0 + j));
+                            acc1 = vfmaq_f32(acc1, a, vld1q_f32(ptrB1 + j));
+                            acc2 = vfmaq_f32(acc2, a, vld1q_f32(ptrB2 + j));
+                            acc3 = vfmaq_f32(acc3, a, vld1q_f32(ptrB3 + j));
+                        }
+
+                        float s0 = vaddvq_f32(acc0);
+                        float s1 = vaddvq_f32(acc1);
+                        float s2 = vaddvq_f32(acc2);
+                        float s3 = vaddvq_f32(acc3);
+
+                        for (; j < m; ++j) {
+                            float a_val = ptrA[j];
+                            s0 += a_val * ptrB0[j];
+                            s1 += a_val * ptrB1[j];
+                            s2 += a_val * ptrB2[j];
+                            s3 += a_val * ptrB3[j];
+                        }
+
+                        C[i * k + (l)] = s0;
+                        C[i * k + (l + 1)] = s1;
+                        C[i * k + (l + 2)] = s2;
+                        C[i * k + (l + 3)] = s3;
+                    }
+
+                    for (; l < lE; ++l) { // matmul_cpu handling
+
+                        float32x4_t acc = vdupq_n_f32(0.0f);
+
+                        float sum = 0;
+                        const float* ptrB = &B_t[l*m];
+
+                        size_t j = 0;
+                        for (; j + 3 < m; j += 4) {
+                            float32x4_t a = vld1q_f32(ptrA + j);
+                            float32x4_t b = vld1q_f32(ptrB + j);
+                            acc = vfmaq_f32(acc, a, b);
+                        }
+                        for (; j < m; ++j) {
+                            sum += ptrA[j] * ptrB[j];
+                        }
+
+                        sum += vaddvq_f32(acc);
+                        C[i*k + l] = sum;
+
+                    }
+                }
+        }
+    }
+    free(B_t);
+}
+
+void Matrix::matmul_cpu_tiled(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
+
+    //A = nxm
+    //B = mxk
+    //C = nxk
+    //Stride A = m
+    //Stride B = k
+    //Stride C = k
+
+    std::tuple<int, int, int> tile_data = get_matmul_tile(n, m, k);
+    int T_n = std::get<0>(tile_data);
+    int T_k = std::get<2>(tile_data);
+
+    for (size_t ic = 0; ic < n; ic += T_n) {
+        size_t iE = std::min(ic + T_n, static_cast<size_t>(n));
+
+        for (size_t lc = 0; lc < k; lc += T_k) {
+            size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
+
+            for (size_t i = ic; i < iE; ++i) {
+                const float* ptrA = &A[i*m];
+                for (size_t l = lc; l < lE; ++l) {
+
+                    float sum = 0;
+                    const float* ptrB = &B[l];
+                   
+                    for (size_t j = 0; j < m; ++j) {
+                        sum += ptrA[j] * ptrB[j*k];
+                    }
+
+                    C[i*k + l] = sum;
+                }
+            }
+        }
+    }
 }
 
 void Matrix::matmul_cpu(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
@@ -679,13 +1153,13 @@ void Matrix::matmul_cpu(const float* __restrict__ A, const float* __restrict__ B
         for (size_t lc = 0; lc < k; lc += T_k) {
             size_t lE = std::min(lc + T_k, static_cast<size_t>(k));
             for (size_t i = ic; i < iE; ++i) {
+
+                const float* ptrA = &A[i*m];
                 for (size_t l = lc; l < lE; ++l) {
 
                     float32x4_t acc = vdupq_n_f32(0.0f);
 
                     float sum = 0;
-
-                    const float* ptrA = &A[i*m];
                     const float* ptrB = &B_t[l*m];
 
                     size_t j = 0;
@@ -707,7 +1181,7 @@ void Matrix::matmul_cpu(const float* __restrict__ A, const float* __restrict__ B
     free(B_t);
 }
 
-void Matrix::matmul_cpu_naive(const float* A, const float* B, float* C, int n, int m, int k) const {
+void Matrix::matmul_cpu_naive(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
     for (size_t i = 0; i < n; ++i) {
         for (size_t l = 0; l < k; ++l) {
             float sum = 0;
@@ -985,9 +1459,12 @@ Matrix Matrix::matmul(const Matrix& other) const {
             } else {
                 
                 //Switch between different matmul alg's for profiling.
-                matmul_cpu_unrolled(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+                //matmul_cpu_unrolled_16x(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+                matmul_cpu_unrolled_8x(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+                //matmul_cpu_unrolled_4x(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
                 //matmul_cpu(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
                 //matmul_cpu_outer(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+                //matmul_cpu_tiled(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
                 //matmul_cpu_naive(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             }
             Matrix ret = Matrix(new_dims, 2, data_out, false);

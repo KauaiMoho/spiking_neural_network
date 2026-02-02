@@ -114,7 +114,6 @@ void test(ANN& model, const std::vector<Matrix>& X, const std::vector<Matrix>& Y
 
 int main() {
 
-    auto start = std::chrono::high_resolution_clock::now();
 
     std::vector<int> sizes = {784, 128, 64, 10};
     std::vector<ANN::Activation> activations = {
@@ -133,18 +132,21 @@ int main() {
     std::tuple<std::vector<Matrix>, std::vector<Matrix>> train_dataset = load_MNIST_data(true, batch_size);
     std::tuple<std::vector<Matrix>, std::vector<Matrix>> test_dataset = load_MNIST_data(false, batch_size);
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     train(model, std::get<0>(train_dataset), std::get<1>(train_dataset), 5, batch_size);
     test(model, std::get<0>(test_dataset), std::get<1>(test_dataset), batch_size);
+
+    auto end = std::chrono::high_resolution_clock::now();
    
     std::cout << "\n";
     model.print_weights();
     model.print_biases();
     std::cout << "\n";
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    std::cout << "Time elapsed: " << duration.count() << " s\n";
+    std::cout << "Time elapsed: " << duration.count()/1000.0 << " s\n";
 
     //For batch size 64
     // 138s for vectorized/tiled matmul

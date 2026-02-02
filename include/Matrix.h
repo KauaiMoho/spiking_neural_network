@@ -33,12 +33,15 @@ private:
     int convert_idx(const std::initializer_list<int>& pos) const;//Convert given index to 1d flattend index using strides
 
     std::tuple<int,int,int> get_matmul_tile(int n, int m, int k) const; // Get a tile size for a specific matix size. It will assume matrix dimensions are square for fitting into cache for simplicity.
-    void matmul_cuda(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
+    void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) const;
     void matmul_cpu_batched(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, const int* this_dists, const int* other_dists, int n, int m, int k, int z) const;
     void matmul_cpu_outer(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
-    void matmul_cpu_unrolled(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
+    void matmul_cpu_unrolled_16x(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
+    void matmul_cpu_unrolled_8x(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
+    void matmul_cpu_unrolled_4x(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
     void matmul_cpu(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
-    void matmul_cpu_naive(const float* A, const float* B, float* C, int n, int m, int k) const; // For comparison.
+    void matmul_cpu_tiled(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
+    void matmul_cpu_naive(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const; // For comparison.
 
 
     //Will transpose a matrix physically using simd operations, used internally for efficient matmul and public facing transpose2d.
