@@ -41,6 +41,7 @@ private:
     void matmul_cpu_unrolled_4x(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
     void matmul_cpu(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
     void matmul_cpu_tiled(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
+    void matmul_cpu_tiled_old(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const;
     void matmul_cpu_naive(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const; // For comparison.
 
 

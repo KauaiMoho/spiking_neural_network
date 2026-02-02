@@ -1094,6 +1094,61 @@ void Matrix::matmul_cpu_unrolled_4x(const float* __restrict__ A, const float* __
     free(B_t);
 }
 
+//Main issue 1: Not targeting performance cores, learned from profiler results and apple silicion optimization pdf (v4)
+//Main issue 2: Assumption of square matricies: but in neural network matreces are rarely square (batch size usually less or more than dimension)
+//Issue 3: Should focus on tiling B into cache (leaving some space for A), since it needs to be accesed multiple times for one val/row of A.
+// Result: Updated tile code to be rectangular and weight on T_k, ignore m dimension. (Also made L1 tiling much more conservative)
+void Matrix::matmul_cpu_tiled_old(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
+
+
+    constexpr size_t L1_bytes = 64 * 1024;
+    constexpr size_t L2_bytes = 4 * 1024 * 1024;
+    constexpr int cache_line_size = 128;
+
+    //Choose between L1 and L2 cache based on matrix size
+    size_t cache_line_floats = cache_line_size / sizeof(float);
+    size_t usable_cache_bytes;
+    if ((n * m + m * k + n * k) * sizeof(float) <= L1_bytes) {
+        //Only use max 2/3 of the available bytes in a given cache.
+        usable_cache_bytes = L1_bytes / 1.5;
+    } else {
+        usable_cache_bytes = L2_bytes / 1.5;
+    }
+
+    size_t usable_cache_floats = usable_cache_bytes / sizeof(float);
+
+    int mat_tile = static_cast<int>(sqrt(usable_cache_floats / 3));
+
+    mat_tile -= mat_tile%cache_line_floats;
+    if (mat_tile == 0) {
+        mat_tile = cache_line_floats;
+    }
+
+    for (size_t ic = 0; ic < n; ic += mat_tile) {
+        size_t iE = std::min(ic + mat_tile, static_cast<size_t>(n));
+
+        for (size_t lc = 0; lc < k; lc += mat_tile) {
+            size_t lE = std::min(lc + mat_tile, static_cast<size_t>(k));
+
+            for (size_t i = ic; i < iE; ++i) {
+                const float* ptrA = &A[i*m];
+                for (size_t l = lc; l < lE; ++l) {
+
+                    float sum = 0;
+                    const float* ptrB = &B[l];
+                   
+                    for (size_t j = 0; j < m; ++j) {
+                        sum += ptrA[j] * ptrB[j*k];
+                    }
+
+                    C[i*k + l] = sum;
+                }
+            }
+        }
+    }
+
+}
+
 void Matrix::matmul_cpu_tiled(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
 
     //A = nxm
@@ -1465,6 +1520,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
                 //matmul_cpu(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
                 //matmul_cpu_outer(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
                 //matmul_cpu_tiled(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+                //matmul_cpu_tiled_old(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
                 //matmul_cpu_naive(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
             }
             Matrix ret = Matrix(new_dims, 2, data_out, false);
