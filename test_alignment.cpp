@@ -28,6 +28,10 @@ void test(const float* ptr) {
 }
 
 int main() {
+
+    size_t a = alignof(max_align_t);
+    printf("Alignment of max_align_t is %zu (%#zx)\n", a, a); // Malloc only has 8 byte allignment, need to do alligned_alloc
+
     const size_t bytes = N * sizeof(float) + (N * sizeof(float))%ALIGNMENT;
 
     float* aligned = static_cast<float*>(aligned_alloc(ALIGNMENT, bytes));

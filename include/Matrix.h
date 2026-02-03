@@ -21,7 +21,9 @@ class Matrix {
   static bool cuda;
   static uint16_t tile;  // MUST be a multiple of 4.
   static constexpr uint16_t alignment =
-      32;  // 16 minimum for SIMD optimization, can change to that
+      32;  // 16 minimum for SIMD optimization, can change to that, aligning to
+           // a higher multiple of 16 can reduce cache line splits, however in
+           // my testing this dosent have much of an effect on speed.
 
   template <typename T>
   static inline T* assume_aligned(T* ptr) {

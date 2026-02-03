@@ -410,7 +410,7 @@ std::tuple<int, int, int> Matrix::get_matmul_tile(int n, int m, int k) const {
   // Choose between L1 and L2 cache based on matrix size
   size_t cache_line_floats = cache_line_size / sizeof(float);
   size_t usable_cache_bytes;
-  if (n * m * k * sizeof(float) <= L1_bytes) {  // Heuristic, very conservative
+  if (n * m * k * sizeof(float) <= L1_bytes) {  // Heuristic, very conservative, estimating based on general dimensions
     // Only use max 2/3 of the available bytes in a given cache.
     usable_cache_bytes = L1_bytes / 1.5;
   } else {
@@ -419,7 +419,10 @@ std::tuple<int, int, int> Matrix::get_matmul_tile(int n, int m, int k) const {
 
   size_t usable_cache_floats = usable_cache_bytes / sizeof(float);
 
-  // Assume T_m = m since we dont tile m for inner product.
+  //Assume T_m = m since we dont tile m for inner product.
+
+  //How many rows of A and columns of B can we load at once so that the CPU doesn’t go to main memory too often?
+
   //  m * (Tn + Tk) = usable_cache_floats
   //  (Tn + Tk) = usable_cache_floats / m
   //  (( T_k * ratio) + Tk) = usable_cache_floats / m (Heuristic to solve
@@ -429,17 +432,16 @@ std::tuple<int, int, int> Matrix::get_matmul_tile(int n, int m, int k) const {
                 (k * 2);  // Ratio will give more tile space to T_k, since it is
                           // the more important dimension for inner product.
 
-  // Only used in outer product, placeholder (large tile, since what matters is
-  // the size of C (based on T_k/T_n))
+  int T_k = static_cast<int>((usable_cache_floats / (m * (1.0 + ratio))));
+  int T_n = static_cast<int>(T_k * ratio);
+
+  // Only used in outer product, placeholder
   int T_m;
   if (m * sizeof(float) < (L2_bytes / 4)) {
     T_m = m;
   } else {
     T_m = 1024;
   }
-
-  int T_k = static_cast<int>((usable_cache_floats / (m * (1.0 + ratio))));
-  int T_n = static_cast<int>(T_k * ratio);
 
   // Now we round down to cache line size. Could use bit masking since cache
   // line power of 2 (originally i did this, but changed back for clarity):
