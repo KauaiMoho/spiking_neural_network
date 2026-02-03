@@ -168,10 +168,5 @@ int main() {
 
   std::cout << "Time elapsed: " << duration.count() / 1000.0 << " s\n";
 
-  // For batch size 64
-  //  138s for vectorized/tiled matmul
-  //  ~202s for naive matmul.
-  // Lower batch sizes -> More accurate but slower.
-
   return 0;
 }

@@ -14,6 +14,7 @@ void matmul_kernel(float* A, float* B, float* C, int n, int m, int k) {
     // const unsigned int y = blockIdx.x * blockDim.y + threadIdx.x;
 }
 
+//Extern from Matrix Class
 extern "C" void matmul_cuda(const float* A, const float* B, float* C, int n, int m, int k) {
 
 }

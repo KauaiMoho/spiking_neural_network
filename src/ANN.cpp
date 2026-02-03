@@ -35,6 +35,10 @@ ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n,
 }
 
 Matrix ANN::forward(const Matrix& input) {
+
+  //Compute a(i) = activation(z(i))
+  //Compute z(i) = a(i-1) * w(i) + b(i)
+
   if (input.get_dim_len() != 2 || input.get_dims_index(1) != layer_sizes[0]) {
     throw std::invalid_argument("Invalid input size!");
   }
@@ -44,13 +48,12 @@ Matrix ANN::forward(const Matrix& input) {
 
   Matrix ret = input.clone();
   for (size_t i = 0; i < weights.size(); ++i) {
-    ;
     a_cache.push_back(ret.clone());
     ret = ret.matmul(weights[i]);
     if (i != weights.size() - 1) {
       z_cache.push_back(ret.clone());
     }
-    ret.add_inplace(biases[i]);
+    ret.add_inplace(biases[i]); //Shared across all samples
     if (activations[i] == RELU) {
       ret.apply_inplace(relu);
     } else if (activations[i] == SIGMOID) {
@@ -66,14 +69,21 @@ Matrix ANN::forward(const Matrix& input) {
 }
 
 void ANN::backprop(const Matrix& init_d_loss) {
-  Matrix d_loss = init_d_loss.clone();
 
+  Matrix d_loss = init_d_loss.clone(); //Error term dC/dz(i-1) =  da/dz * dC/dz, batch_size x curr_size (initialized as output size)
   for (int i = weights.size() - 1; i >= 0; --i) {
-    grad_weights.push_back(a_cache[i].transpose2d().matmul(d_loss));
-    grad_biases.push_back(d_loss.sum_rows());
-    if (i != 0) {
-      d_loss = d_loss.matmul(weights[i].transpose2d());
-      if (activations[i - 1] == RELU) {
+
+    //dC/dw = dz/dw * da/dz * dC/dz = a(i-1)^T * error term
+    grad_weights.push_back(a_cache[i].transpose2d().matmul(d_loss)); //Transpose since a will be batch_size x weight_size initially
+    //dC/db = dz/db * da/dz * dC/dz = 1 * error term, sum because biases shared across all samples
+    grad_biases.push_back(d_loss.sum_rows());     //Will be be weight_size (1d)
+
+    if (i != 0) { //Compute next error term (dC/dz(i-1) = da(i-1)/dz(i-1)) * dz(i)/da(i-1) * dC/dz(i) (previous error term)
+
+      //Weights are prev_size x curr_size, transpose so they are curr_size x prev_size - Error term dimensions now correct
+      d_loss = d_loss.matmul(weights[i].transpose2d()); //dz(i)/da(i-1)
+      if (activations[i - 1] == RELU) { //da(i-1)/dz(i-1)) (Derivitive of activation);
+        //Multiply with previous error term dC/dz(i)
         d_loss.emul_inplace(z_cache[i - 1].apply(deriv_relu));
       } else if (activations[i - 1] == SIGMOID) {
         d_loss.emul_inplace(z_cache[i - 1].apply(deriv_sigmoid));
