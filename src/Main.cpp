@@ -3,7 +3,11 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <stdio.h>
 #include <vector>
+#include <pthread.h>
+#include <mach/mach.h>
+#include <mach/thread_policy.h>
 
 #include "../include/ANN.h"     // this contains the ANN class definition
 #include "../include/Matrix.h"  // this contains the Matrix class definition
@@ -134,6 +138,12 @@ void test(ANN& model, const std::vector<Matrix>& X,
 }
 
 int main() {
+
+  pthread_t t = pthread_self();
+  qos_class_t qos;
+  int ret = pthread_get_qos_class_np(t, &qos, NULL);
+  std::cout << ret << "\n";
+  
   std::vector<int> sizes = {784, 128, 64, 10};
   std::vector<ANN::Activation> activations = {
       ANN::Activation::RELU, ANN::Activation::RELU, ANN::Activation::SOFTMAX};

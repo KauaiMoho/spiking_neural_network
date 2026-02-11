@@ -402,6 +402,7 @@ int* Matrix::get_broadcasted_strides(const int* dims_new,
 std::tuple<int, int, int> Matrix::get_matmul_tile(int n, int m, int k) const {
   // Use loop order to optimize L Cache loading.
   // Use sysctl -a | grep cache to check Apple Silicon Cache Size
+  // use sysctl -a | grep perflevel to check compute clusters
 
   constexpr size_t L1_bytes = 128 * 1024;  // Performance cores
   constexpr size_t L2_bytes = 16 * 1024 * 1024;
@@ -1563,18 +1564,14 @@ Matrix Matrix::matmul(const Matrix& other) const {
                     new_dims[1]);
       } else {
         // Switch between different matmul alg's for profiling.
-        // matmul_cpu_unrolled_16x(data, other.data, data_out, new_dims[0],
-        // dims[1], new_dims[1]);
-        matmul_cpu_unrolled_8x(data, other.data, data_out, new_dims[0], dims[1],
-                               new_dims[1]);
-        // matmul_cpu_unrolled_4x(data, other.data, data_out, new_dims[0],
-        // dims[1], new_dims[1]); matmul_cpu(data, other.data, data_out,
-        // new_dims[0], dims[1], new_dims[1]); matmul_cpu_outer(data,
-        // other.data, data_out, new_dims[0], dims[1], new_dims[1]);
-        // matmul_cpu_tiled(data, other.data, data_out, new_dims[0], dims[1],
-        // new_dims[1]); matmul_cpu_tiled_old(data, other.data, data_out,
-        // new_dims[0], dims[1], new_dims[1]); matmul_cpu_naive(data,
-        // other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+        // matmul_cpu_unrolled_16x(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+        //matmul_cpu_unrolled_8x(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+        // matmul_cpu_unrolled_4x(data, other.data, data_out, new_dims[0],dims[1], new_dims[1]); 
+         matmul_cpu(data, other.data, data_out,new_dims[0], dims[1], new_dims[1]); 
+        // matmul_cpu_outer(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+        // matmul_cpu_tiled(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+        // matmul_cpu_tiled_old(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
+        // matmul_cpu_naive(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
       }
       Matrix ret = Matrix(new_dims, 2, data_out, false);
       return ret;
