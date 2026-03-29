@@ -28,13 +28,13 @@ ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n,
     int curr_size = layer_sizes[i];
     int dims_weights[] = {prev_size, curr_size};
     int dims_biases[] = {curr_size};
-    weights.push_back(Matrix(dims_weights, 2, seed));
-    biases.push_back(Matrix(dims_biases, 1, (float)0));
+    weights.push_back(Tensor(dims_weights, 2, seed));
+    biases.push_back(Tensor(dims_biases, 1, (float)0));
     prev_size = curr_size;
   }
 }
 
-Matrix ANN::forward(const Matrix& input) {
+Tensor ANN::forward(const Tensor& input) {
 
   //Compute a(i) = activation(z(i))
   //Compute z(i) = a(i-1) * w(i) + b(i)
@@ -46,7 +46,7 @@ Matrix ANN::forward(const Matrix& input) {
   z_cache.clear();
   a_cache.clear();
 
-  Matrix ret = input.clone();
+  Tensor ret = input.clone();
   for (size_t i = 0; i < weights.size(); ++i) {
     a_cache.push_back(ret.clone());
     ret = ret.matmul(weights[i]);
@@ -68,9 +68,9 @@ Matrix ANN::forward(const Matrix& input) {
   return ret;
 }
 
-void ANN::backprop(const Matrix& init_d_loss) {
+void ANN::backprop(const Tensor& init_d_loss) {
 
-  Matrix d_loss = init_d_loss.clone(); //Error term dC/dz(i-1) =  da/dz * dC/dz, batch_size x curr_size (initialized as output size)
+  Tensor d_loss = init_d_loss.clone(); //Error term dC/dz(i-1) =  da/dz * dC/dz, batch_size x curr_size (initialized as output size)
   for (int i = weights.size() - 1; i >= 0; --i) {
 
     //dC/dw = dz/dw * da/dz * dC/dz = a(i-1)^T * error term
@@ -120,7 +120,7 @@ float ANN::get_learning_rate() const { return learning_rate; }
 void ANN::set_learning_rate(float l) { learning_rate = l; }
 
 // Only for a 1D vectors - 1 x N.
-float ANN::cross_entropy(const Matrix& truth, const Matrix& preds) {
+float ANN::cross_entropy(const Tensor& truth, const Tensor& preds) {
   if (truth.get_dim_len() == 2 && preds.get_dim_len() == 2) {
     if (truth.get_dims_index(1) == preds.get_dims_index(1)) {
       float tot_loss = 0;
@@ -141,7 +141,7 @@ float ANN::cross_entropy(const Matrix& truth, const Matrix& preds) {
   }
 }
 
-int ANN::sum_correct(const Matrix& truth, const Matrix& preds) {
+int ANN::sum_correct(const Tensor& truth, const Tensor& preds) {
   if (truth.get_dim_len() == 2 && preds.get_dim_len() == 2) {
     if (truth.get_dims_index(1) == preds.get_dims_index(1)) {
       int tot = 0;
@@ -170,7 +170,7 @@ int ANN::sum_correct(const Matrix& truth, const Matrix& preds) {
 }
 
 // Only for a 1D vector. - 1 x N.
-void ANN::apply_stable_softmax(Matrix& m) {
+void ANN::apply_stable_softmax(Tensor& m) {
   if (m.get_dim_len() == 2) {
     for (int r = 0; r < m.get_dims_index(0); ++r) {
       float max = -INFINITY;

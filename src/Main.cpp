@@ -10,18 +10,18 @@
 #include <mach/thread_policy.h>
 
 #include "../include/ANN.h"     // this contains the ANN class definition
-#include "../include/Matrix.h"  // this contains the Matrix class definition
+#include "../include/Tensor.h"  // this contains the Tensor class definition
 
-// Check compiled assembly for matrix class: g++ -O3 -S src/Matrix.cpp -o
+// Check compiled assembly for matrix class: g++ -O3 -S src/Tensor.cpp -o
 // matmul.s -I include Check compiled assembly for unaligned matrix class: g++
-// -O3 -mno-unaligned-access -S src/Matrix.cpp -o matmul_una.s -I include Check
+// -O3 -mno-unaligned-access -S src/Tensor.cpp -o matmul_una.s -I include Check
 // diff: diff -u matmul.s matmul_una.s | less
 
 // X, Y
-std::tuple<std::vector<Matrix>, std::vector<Matrix>> load_MNIST_data(
+std::tuple<std::vector<Tensor>, std::vector<Tensor>> load_MNIST_data(
     bool train, int batch_size) {
-  std::vector<Matrix> X;
-  std::vector<Matrix> Y;
+  std::vector<Tensor> X;
+  std::vector<Tensor> Y;
 
   std::ifstream imgFile;
   std::ifstream labFile;
@@ -95,8 +95,8 @@ std::tuple<std::vector<Matrix>, std::vector<Matrix>> load_MNIST_data(
       label_data[(i * 10) + (int)temp_label] = 1.0f;
     }
 
-    X.push_back(Matrix(img_dims, 2, image_data));
-    Y.push_back(Matrix(lab_dims, 2, label_data));
+    X.push_back(Tensor(img_dims, 2, image_data));
+    Y.push_back(Tensor(lab_dims, 2, label_data));
 
     free(image_data);
     free(label_data);
@@ -105,16 +105,16 @@ std::tuple<std::vector<Matrix>, std::vector<Matrix>> load_MNIST_data(
   return std::make_tuple(X, Y);
 }
 
-void train(ANN& model, const std::vector<Matrix>& X,
-           const std::vector<Matrix>& Y, int epochs, int batch_size) {
+void train(ANN& model, const std::vector<Tensor>& X,
+           const std::vector<Tensor>& Y, int epochs, int batch_size) {
   for (size_t i = 0; i < epochs; ++i) {
     int correct = 0;
     float loss = 0;
     for (size_t i = 0; i < X.size(); ++i) {
-      Matrix output = model.forward(X[i]);
+      Tensor output = model.forward(X[i]);
       loss += ANN::cross_entropy(Y[i], output);
       correct += ANN::sum_correct(Y[i], output);
-      Matrix d_loss = output.add(Y[i].scmul(-1)).scmul(1.0 / batch_size);
+      Tensor d_loss = output.add(Y[i].scmul(-1)).scmul(1.0 / batch_size);
       model.backprop(d_loss);
       model.update_weights_biases();
       model.clear_grads_and_cache();
@@ -125,11 +125,11 @@ void train(ANN& model, const std::vector<Matrix>& X,
   }
 }
 
-void test(ANN& model, const std::vector<Matrix>& X,
-          const std::vector<Matrix>& Y, int batch_size) {
+void test(ANN& model, const std::vector<Tensor>& X,
+          const std::vector<Tensor>& Y, int batch_size) {
   int correct = 0;
   for (size_t i = 0; i < X.size(); ++i) {
-    Matrix test_output = model.forward(X[i]);
+    Tensor test_output = model.forward(X[i]);
     model.clear_grads_and_cache();
     correct += ANN::sum_correct(Y[i], test_output);
   }
@@ -155,9 +155,9 @@ int main() {
 
   constexpr int batch_size = 64;
 
-  std::tuple<std::vector<Matrix>, std::vector<Matrix>> train_dataset =
+  std::tuple<std::vector<Tensor>, std::vector<Tensor>> train_dataset =
       load_MNIST_data(true, batch_size);
-  std::tuple<std::vector<Matrix>, std::vector<Matrix>> test_dataset =
+  std::tuple<std::vector<Tensor>, std::vector<Tensor>> test_dataset =
       load_MNIST_data(false, batch_size);
 
   auto start = std::chrono::high_resolution_clock::now();

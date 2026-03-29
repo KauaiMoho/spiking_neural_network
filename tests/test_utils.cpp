@@ -1,7 +1,7 @@
-#include "Matrix.h"
+#include "Tensor.h"
 #include "test_utils.h"
 
-void fill_sequential(Matrix &m) {
+void fill_sequential(Tensor &m) {
     int dim_len = m.get_dim_len();
     int total = 1;
     for (int i = 0; i < dim_len; ++i)
@@ -15,14 +15,14 @@ float square(float s) {
     return s * s;
 }
 
-Matrix naive_matmul(const Matrix &A, const Matrix &B) {
+Tensor naive_matmul(const Tensor &A, const Tensor &B) {
     
     int n = A.get_dims_index(0);
     int m = A.get_dims_index(1);
     int k = B.get_dims_index(1);
 
     int dims[] = {n, k};
-    Matrix C(dims, 2, 0.0f);
+    Tensor C(dims, 2, 0.0f);
 
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < k; ++j) {

@@ -1,14 +1,14 @@
 #include <gtest/gtest.h>
-#include "Matrix.h"
+#include "Tensor.h"
 #include "test_utils.h"
 
-TEST(MatrixOps, Clone) {
+TEST(TensorOps, Clone) {
 
     int dims[] = {3, 3};
 
-    Matrix A(dims,2,0.0f);
+    Tensor A(dims,2,0.0f);
     fill_sequential(A);
-    Matrix B = A.clone();
+    Tensor B = A.clone();
     
     EXPECT_EQ(B.get_dim_len(), A.get_dim_len());
 
@@ -21,23 +21,23 @@ TEST(MatrixOps, Clone) {
     EXPECT_FLOAT_EQ(A.get_index(0), 0.0f);
 }
 
-TEST(MatrixOps, ScMul) {
+TEST(TensorOps, ScMul) {
 
     int dims[] = {2, 3};
 
-    Matrix A(dims,2,1.0f);
-    Matrix B = A.scmul(3.0f);
+    Tensor A(dims,2,1.0f);
+    Tensor B = A.scmul(3.0f);
 
     for (int i = 0; i < 6; ++i) {
         EXPECT_FLOAT_EQ(B.get_index(i), 3.0f);
     }
 }
 
-TEST(MatrixOps, ScMulInPlace) {
+TEST(TensorOps, ScMulInPlace) {
 
     int dims[] = {2, 3};
 
-    Matrix A(dims,2,2.0f);
+    Tensor A(dims,2,2.0f);
     A.scmul_inplace(4.0f);
 
     for (int i = 0; i < 6; ++i) {
@@ -46,12 +46,12 @@ TEST(MatrixOps, ScMulInPlace) {
 }
 
 
-TEST(MatrixOps, Apply) {
+TEST(TensorOps, Apply) {
 
     int dims[] = {2, 2};
 
-    Matrix A(dims,2,2.0f);
-    Matrix B = A.apply(square);
+    Tensor A(dims,2,2.0f);
+    Tensor B = A.apply(square);
 
     for (int i = 0; i < 4; ++i) {
         EXPECT_FLOAT_EQ(B.get_index(i), 4.0f);
@@ -64,15 +64,15 @@ TEST(MatrixOps, Apply) {
     }
 }
 
-TEST(MatrixOps, AddSmall_ColVector) {
+TEST(TensorOps, AddSmall_ColVector) {
 
     int dims[] = {3, 3};
     int vdims[] = {3};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(vdims, 1, 2.0f);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(vdims, 1, 2.0f);
 
-    Matrix C = A.add(B);
+    Tensor C = A.add(B);
     for (int i = 0; i < 9; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 3.0f);
     }
@@ -84,14 +84,14 @@ TEST(MatrixOps, AddSmall_ColVector) {
 }
 
 
-TEST(MatrixOps, AddSmall_RowVector) {
+TEST(TensorOps, AddSmall_RowVector) {
 
     int dims[] = {2, 5};
     int vdims[] = {5};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(vdims, 1, 1.5f);
-    Matrix C = A.add(B);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(vdims, 1, 1.5f);
+    Tensor C = A.add(B);
 
     for (int i = 0; i < 10; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 2.5f);
@@ -103,13 +103,13 @@ TEST(MatrixOps, AddSmall_RowVector) {
     }
 }
 
-TEST(MatrixOps, AddSmall_MatrixMatrix) {
+TEST(TensorOps, AddSmall_TensorTensor) {
 
     int dims[] = {2, 3};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(dims, 2, 4.0f);
-    Matrix C = A.add(B);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(dims, 2, 4.0f);
+    Tensor C = A.add(B);
 
     for (int i = 0; i < 6; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 5.0f);
@@ -123,14 +123,14 @@ TEST(MatrixOps, AddSmall_MatrixMatrix) {
 
 }
 
-TEST(MatrixOps, AddLarge_ColVector) {
+TEST(TensorOps, AddLarge_ColVector) {
 
     int dims[] = {128, 256};
     int vdims[] = {128};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(vdims, 1, 3.0f);
-    Matrix C = A.add(B);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(vdims, 1, 3.0f);
+    Tensor C = A.add(B);
 
     for (int i = 0; i < 128 * 256; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 4.0f);
@@ -143,14 +143,14 @@ TEST(MatrixOps, AddLarge_ColVector) {
     }
 }
 
-TEST(MatrixOps, AddLarge_RowVector) {
+TEST(TensorOps, AddLarge_RowVector) {
 
     int dims[] = {64, 128};
     int vdims[] = {128};
 
-    Matrix A(dims, 2, 2.0f);
-    Matrix B(vdims, 1, 0.5f);
-    Matrix C = A.add(B);
+    Tensor A(dims, 2, 2.0f);
+    Tensor B(vdims, 1, 0.5f);
+    Tensor C = A.add(B);
 
     for (int i = 0; i < 64 * 128; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 2.5f);
@@ -163,14 +163,14 @@ TEST(MatrixOps, AddLarge_RowVector) {
     }
 }
 
-TEST(MatrixOps, AddLarge_MatrixMatrix) {
+TEST(TensorOps, AddLarge_TensorTensor) {
 
     int dims[] = {256, 256};
 
-    Matrix A(dims, 2, 1.25f);
-    Matrix B(dims, 2, 2.75f);
+    Tensor A(dims, 2, 1.25f);
+    Tensor B(dims, 2, 2.75f);
 
-    Matrix C = A.add(B);
+    Tensor C = A.add(B);
 
     for (int i = 0; i < 256 * 256; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 4.0f);
@@ -183,15 +183,15 @@ TEST(MatrixOps, AddLarge_MatrixMatrix) {
     }
 }
 
-TEST(MatrixOps, AddLarge_NonAlignedDims_RowVector) {
+TEST(TensorOps, AddLarge_NonAlignedDims_RowVector) {
 
     int dims[]  = {127, 251};
     int vdims[] = {251};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(vdims, 1, 2.25f);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(vdims, 1, 2.25f);
 
-    Matrix C = A.add(B);
+    Tensor C = A.add(B);
     for (int i = 0; i < 127 * 251; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 3.25f);
     }
@@ -204,15 +204,15 @@ TEST(MatrixOps, AddLarge_NonAlignedDims_RowVector) {
 }
 
 
-TEST(MatrixOps, EMulSmall_ColVector) {
+TEST(TensorOps, EMulSmall_ColVector) {
 
     int dims[] = {3, 3};
     int vdims[] = {3};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(vdims, 1, 2.0f);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(vdims, 1, 2.0f);
 
-    Matrix C = A.emul(B);
+    Tensor C = A.emul(B);
     for (int i = 0; i < 9; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 2.0f);
     }
@@ -223,14 +223,14 @@ TEST(MatrixOps, EMulSmall_ColVector) {
     }
 }
 
-TEST(MatrixOps, EMulSmall_RowVector) {
+TEST(TensorOps, EMulSmall_RowVector) {
 
     int dims[] = {2, 5};
     int vdims[] = {5};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(vdims, 1, 1.5f);
-    Matrix C = A.emul(B);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(vdims, 1, 1.5f);
+    Tensor C = A.emul(B);
 
     for (int i = 0; i < 10; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 1.5f);
@@ -242,13 +242,13 @@ TEST(MatrixOps, EMulSmall_RowVector) {
     }
 }
 
-TEST(MatrixOps, EMulSmall_MatrixMatrix) {
+TEST(TensorOps, EMulSmall_TensorTensor) {
 
     int dims[] = {2, 3};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(dims, 2, 4.0f);
-    Matrix C = A.emul(B);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(dims, 2, 4.0f);
+    Tensor C = A.emul(B);
 
     for (int i = 0; i < 6; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 4.0f);
@@ -262,14 +262,14 @@ TEST(MatrixOps, EMulSmall_MatrixMatrix) {
 
 }
 
-TEST(MatrixOps, EMulLarge_ColVector) {
+TEST(TensorOps, EMulLarge_ColVector) {
 
     int dims[] = {128, 256};
     int vdims[] = {128};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(vdims, 1, 3.0f);
-    Matrix C = A.emul(B);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(vdims, 1, 3.0f);
+    Tensor C = A.emul(B);
 
     for (int i = 0; i < 128 * 256; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 3.0f);
@@ -282,14 +282,14 @@ TEST(MatrixOps, EMulLarge_ColVector) {
     }
 }
 
-TEST(MatrixOps, EMulLarge_RowVector) {
+TEST(TensorOps, EMulLarge_RowVector) {
 
     int dims[] = {64, 128};
     int vdims[] = {128};
 
-    Matrix A(dims, 2, 2.0f);
-    Matrix B(vdims, 1, 0.5f);
-    Matrix C = A.emul(B);
+    Tensor A(dims, 2, 2.0f);
+    Tensor B(vdims, 1, 0.5f);
+    Tensor C = A.emul(B);
 
     for (int i = 0; i < 64 * 128; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 1.0f);
@@ -302,14 +302,14 @@ TEST(MatrixOps, EMulLarge_RowVector) {
     }
 }
 
-TEST(MatrixOps, EMulLarge_MatrixMatrix) {
+TEST(TensorOps, EMulLarge_TensorTensor) {
 
     int dims[] = {256, 256};
 
-    Matrix A(dims, 2, 1.25f);
-    Matrix B(dims, 2, 2.75f);
+    Tensor A(dims, 2, 1.25f);
+    Tensor B(dims, 2, 2.75f);
 
-    Matrix C = A.emul(B);
+    Tensor C = A.emul(B);
 
     for (int i = 0; i < 256 * 256; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 3.4375f);
@@ -322,15 +322,15 @@ TEST(MatrixOps, EMulLarge_MatrixMatrix) {
     }
 }
 
-TEST(MatrixOps, EMulLarge_NonAlignedDims_RowVector) {
+TEST(TensorOps, EMulLarge_NonAlignedDims_RowVector) {
 
     int dims[]  = {127, 251};
     int vdims[] = {251};
 
-    Matrix A(dims, 2, 1.0f);
-    Matrix B(vdims, 1, 2.25f);
+    Tensor A(dims, 2, 1.0f);
+    Tensor B(vdims, 1, 2.25f);
 
-    Matrix C = A.emul(B);
+    Tensor C = A.emul(B);
     for (int i = 0; i < 127 * 251; ++i) {
         EXPECT_FLOAT_EQ(C.get_index(i), 2.25f);
     }
@@ -343,13 +343,13 @@ TEST(MatrixOps, EMulLarge_NonAlignedDims_RowVector) {
 }
 
 
-TEST(MatrixOps, Transpose2D) {
+TEST(TensorOps, Transpose2D) {
 
     int dims[] = {2, 3};
 
-    Matrix A(dims,2,0.0f);
+    Tensor A(dims,2,0.0f);
     fill_sequential(A);
-    Matrix B = A.transpose2d();
+    Tensor B = A.transpose2d();
 
     EXPECT_EQ(B.get_dims_index(0), 3);
     EXPECT_EQ(B.get_dims_index(1), 2);
@@ -361,13 +361,13 @@ TEST(MatrixOps, Transpose2D) {
     }
 }
 
-TEST(MatrixOps, MediumTranspose2D) {
+TEST(TensorOps, MediumTranspose2D) {
 
     int dims[] = {20, 20};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
     fill_sequential(A);
 
-    Matrix At = A.transpose2d();
+    Tensor At = A.transpose2d();
 
     EXPECT_EQ(At.get_dims_index(0), dims[1]);
     EXPECT_EQ(At.get_dims_index(1), dims[0]);
@@ -384,13 +384,13 @@ TEST(MatrixOps, MediumTranspose2D) {
     EXPECT_FLOAT_EQ(A.get({19,19}), At.get({19,19}));
 }
 
-TEST(MatrixOps, LargeMatrixTranspose2D) {
+TEST(TensorOps, LargeTensorTranspose2D) {
 
     int dims[] = {1024, 512};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
     fill_sequential(A);
 
-    Matrix At = A.transpose2d();
+    Tensor At = A.transpose2d();
 
     EXPECT_EQ(At.get_dims_index(0), dims[1]);
     EXPECT_EQ(At.get_dims_index(1), dims[0]);
@@ -408,26 +408,26 @@ TEST(MatrixOps, LargeMatrixTranspose2D) {
     EXPECT_FLOAT_EQ(A.get({dims[0]-1, dims[1]-1}), At.get({dims[1]-1, dims[0]-1}));
 }
 
-TEST(MatrixOps, SumCols) {
+TEST(TensorOps, SumCols) {
 
     int dims[] = {2, 3};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
     fill_sequential(A);
 
-    Matrix row_sums = A.sum_cols();
+    Tensor row_sums = A.sum_cols();
 
     EXPECT_EQ(row_sums.get_dims_index(0), 2);
     EXPECT_FLOAT_EQ(row_sums.get({0}), 3);
     EXPECT_FLOAT_EQ(row_sums.get({1}), 12);
 }
 
-TEST(MatrixOps, SumRows) {
+TEST(TensorOps, SumRows) {
 
     int dims[] = {2, 3};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
     fill_sequential(A);
 
-    Matrix col_sums = A.sum_rows();
+    Tensor col_sums = A.sum_rows();
 
     EXPECT_EQ(col_sums.get_dims_index(0), 3);
     EXPECT_FLOAT_EQ(col_sums.get({0}), 3);
@@ -435,10 +435,10 @@ TEST(MatrixOps, SumRows) {
     EXPECT_FLOAT_EQ(col_sums.get({2}), 7);
 }
 
-TEST(MatrixOps, SumTotal) {
+TEST(TensorOps, SumTotal) {
 
     int dims[] = {2, 3};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
     fill_sequential(A);
 
     float total_sum = A.sum();
@@ -446,14 +446,14 @@ TEST(MatrixOps, SumTotal) {
     EXPECT_FLOAT_EQ(total_sum, 15);
 }
 
-TEST(MatrixOps, SumEdgeCase1x1) {
+TEST(TensorOps, SumEdgeCase1x1) {
 
     int dims[] = {1, 1};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
     A.set({0,0}, 42);
 
-    Matrix row_sums = A.sum_cols();
-    Matrix col_sums = A.sum_rows();
+    Tensor row_sums = A.sum_cols();
+    Tensor col_sums = A.sum_rows();
     float total_sum = A.sum();
 
     EXPECT_FLOAT_EQ(row_sums.get({0}), 42);
@@ -461,13 +461,13 @@ TEST(MatrixOps, SumEdgeCase1x1) {
     EXPECT_FLOAT_EQ(total_sum, 42);
 }
 
-TEST(MatrixOps, SumZeroMatrix) {
+TEST(TensorOps, SumZeroTensor) {
 
     int dims[] = {3, 4};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
 
-    Matrix row_sums = A.sum_cols();
-    Matrix col_sums = A.sum_rows();
+    Tensor row_sums = A.sum_cols();
+    Tensor col_sums = A.sum_rows();
     float total_sum = A.sum();
 
     for (int i = 0; i < 3; ++i) {
@@ -479,13 +479,13 @@ TEST(MatrixOps, SumZeroMatrix) {
     EXPECT_FLOAT_EQ(total_sum, 0);
 }
 
-TEST(MatrixOps, SumCols_NonDivBy4) {
+TEST(TensorOps, SumCols_NonDivBy4) {
 
     int dims[] = {3, 5};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
     fill_sequential(A);
 
-    Matrix row_sums = A.sum_cols();
+    Tensor row_sums = A.sum_cols();
 
     EXPECT_FLOAT_EQ(row_sums.get_dims_index(0), 3);
     EXPECT_FLOAT_EQ(row_sums.get({0}), 10);
@@ -493,13 +493,13 @@ TEST(MatrixOps, SumCols_NonDivBy4) {
     EXPECT_FLOAT_EQ(row_sums.get({2}), 60);
 }
 
-TEST(MatrixOps, SumRows_NonDivBy4) {
+TEST(TensorOps, SumRows_NonDivBy4) {
 
     int dims[] = {5, 3};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
     fill_sequential(A);
 
-    Matrix col_sums = A.sum_rows();
+    Tensor col_sums = A.sum_rows();
 
     EXPECT_EQ(col_sums.get_dims_index(0), 3);
 
@@ -508,10 +508,10 @@ TEST(MatrixOps, SumRows_NonDivBy4) {
     EXPECT_FLOAT_EQ(col_sums.get({2}), 40);
 }
 
-TEST(MatrixOps, Sum_NonDivBy4) {
+TEST(TensorOps, Sum_NonDivBy4) {
 
     int dims[] = {5, 5};
-    Matrix A(dims, 2, 0.0f);
+    Tensor A(dims, 2, 0.0f);
     fill_sequential(A);
 
     float total_sum = A.sum();

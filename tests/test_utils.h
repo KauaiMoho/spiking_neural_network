@@ -1,6 +1,6 @@
 #pragma once
-#include "Matrix.h"
+#include "Tensor.h"
 
-void fill_sequential(Matrix &m);
+void fill_sequential(Tensor &m);
 float square(float s);
-Matrix naive_matmul(const Matrix &A, const Matrix &B);
+Tensor naive_matmul(const Tensor &A, const Tensor &B);

@@ -1,15 +1,16 @@
 #ifndef MATRIX_H
 #define MATRIX_H
 #include <arm_neon.h>
-
 #include <algorithm>
 #include <iostream>
 #include <random>
 #include <stdexcept>
 #include <thread>
 #include <tuple>
+#include "Metal.hpp"
+#include "AMXKernel.h"
 
-class Matrix {
+class Tensor {
  private:
   // flattened approach
   uint32_t dim_len;
@@ -21,19 +22,17 @@ class Matrix {
   static bool cuda;
   static uint16_t tile;  // MUST be a multiple of 4.
   static constexpr uint16_t alignment =
-      32;  // 16 minimum for SIMD optimization, can change to that, aligning to
+      64;  // 16 minimum for SIMD optimization, can change to that, aligning to
            // a higher multiple of 16 can reduce cache line splits, however in
            // my testing this dosent have much of an effect on speed.
+           // 64 bit alignment for AMX padding, can be 32 for regular SIMD ops
 
-  template <typename T>
-  static inline T* assume_aligned(T* ptr) {
-    return static_cast<T*>(__builtin_assume_aligned(ptr, alignment));
-  }
+  
 
-  Matrix(int* dims_n, int dim_len, float* data_n,
+  Tensor(int* dims_n, int dim_len, float* data_n,
          bool copy);  // Create a new matrix with given data, can choose to copy
                       // or take ownership
-  Matrix(int* dims_n, int dim_len, float* data_n, int data_len,
+  Tensor(int* dims_n, int dim_len, float* data_n, int data_len,
          int* dists);  // Strictly for direct cloning, use incase view has
                        // changed (reshape/broadcast).
   int convert_idx(const std::initializer_list<int>& pos)
@@ -62,6 +61,8 @@ class Matrix {
   void matmul_cpu_unrolled_4x(const float* __restrict__ A,
                               const float* __restrict__ B,
                               float* __restrict__ C, int n, int m, int k) const;
+  void matmul_amx(const float* __restrict__ A, const float* __restrict__ B,
+                  float* __restrict__ C, int n, int m, int k) const;
   void matmul_cpu(const float* __restrict__ A, const float* __restrict__ B,
                   float* __restrict__ C, int n, int m, int k) const;
   void matmul_cpu_tiled(const float* __restrict__ A,
@@ -98,44 +99,44 @@ class Matrix {
                    int max) const;  // Print a given int array
 
  public:
-  Matrix(const int* dims_n, int dim_len,
+  Tensor(const int* dims_n, int dim_len,
          const float* data_n);  // Create a new matrix with a given data array
                                 // (flattened, row major), will copy data
-  Matrix(const int* dims_n, int dim_len,
+  Tensor(const int* dims_n, int dim_len,
          float val);  // Create a new matrix filled with a given float
-  Matrix(
+  Tensor(
       const int* dims_n, int dim_len,
       unsigned int random_seed = 0);  // Create a new matrix filled with random
                                       // floats between [0-1), can set seed
-  Matrix(const Matrix& other);                 // Copy constructor
-  Matrix& operator=(const Matrix& other);      // Copy assignment operator
-  Matrix(Matrix&& other) noexcept;             // Move constructor
-  Matrix& operator=(Matrix&& other) noexcept;  // Move assignment operator
-  ~Matrix();                                   // Destructor
-  Matrix matmul(const Matrix& other)
+  Tensor(const Tensor& other);                 // Copy constructor
+  Tensor& operator=(const Tensor& other);      // Copy assignment operator
+  Tensor(Tensor&& other) noexcept;             // Move constructor
+  Tensor& operator=(Tensor&& other) noexcept;  // Move assignment operator
+  ~Tensor();                                   // Destructor
+  Tensor matmul(const Tensor& other)
       const;             // Matmul, extensive docs in source and usage guides.
-  Matrix clone() const;  // Return a deep copy clone of this object
-  Matrix scmul(float s)
+  Tensor clone() const;  // Return a deep copy clone of this object
+  Tensor scmul(float s)
       const;  // Will multiply matrix by a scalar, and return new matrix.
-  Matrix emul(const Matrix& other)
+  Tensor emul(const Tensor& other)
       const;  // Will multiply two matrices elementwise, and return new matrix.
               // Will prioritize row-col multiplication over col-row
               // multiplication for 1D case
-  Matrix add(const Matrix& other)
+  Tensor add(const Tensor& other)
       const;  // Will add two matrices, and return new matrix. Will prioritize
               // row-col multiplication over col-row multiplication for 1D case
-  Matrix apply(float (*func)(
+  Tensor apply(float (*func)(
       float)) const;  // Will apply a given function, and return new matrix.
-  Matrix transpose2d() const;   // Will transpose data physically leveraging
+  Tensor transpose2d() const;   // Will transpose data physically leveraging
                                 // simd, and return new tranposed matrix.
   void scmul_inplace(float s);  // Will multiply matrix by a scalar inplace.
   void emul_inplace(
-      const Matrix& other);  // Will multiply two matrices elementwise inplace.
-  void add_inplace(const Matrix& other);  // Will add two matrices inplace.
+      const Tensor& other);  // Will multiply two matrices elementwise inplace.
+  void add_inplace(const Tensor& other);  // Will add two matrices inplace.
   void apply_inplace(
       float (*func)(float));  // Will apply a given function inplace.
-  Matrix sum_rows() const;    // Sum all rows into one row vector.
-  Matrix sum_cols() const;    // Sum all cols into one col vector.
+  Tensor sum_rows() const;    // Sum all rows into one row vector.
+  Tensor sum_cols() const;    // Sum all cols into one col vector.
   float sum() const;          // Sum all rows and cols into one float.
   float get(const std::initializer_list<int>& pos)
       const;  // Get a value using format {x, y, z, ...}

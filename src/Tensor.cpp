@@ -1,13 +1,13 @@
-#include "Matrix.h"
+#include "Tensor.h"
 
 // Default do not use CUDA
-bool Matrix::cuda = false;
-uint16_t Matrix::tile = 512;
+bool Tensor::cuda = false;
+uint16_t Tensor::tile = 512;
 
-Matrix::Matrix(const int* dims_n, int dim_len, const float* data_n)
+Tensor::Tensor(const int* dims_n, int dim_len, const float* data_n)
     : dim_len(dim_len) {
   if (dim_len == 0) {
-    throw std::invalid_argument("Matrix dimensions cannot be empty!");
+    throw std::invalid_argument("Tensor dimensions cannot be empty!");
   }
 
   dists = int_size_alloc(dim_len);
@@ -36,11 +36,11 @@ Matrix::Matrix(const int* dims_n, int dim_len, const float* data_n)
   }
 }
 
-Matrix::Matrix(int* dims_n, int dim_len, float* data_n, int data_len,
+Tensor::Tensor(int* dims_n, int dim_len, float* data_n, int data_len,
                int* dists_n)
     : dim_len(dim_len), data_len(data_len) {
   if (dim_len == 0) {
-    throw std::invalid_argument("Matrix dimensions cannot be empty!");
+    throw std::invalid_argument("Tensor dimensions cannot be empty!");
   }
 
   dists = int_size_alloc(dim_len);
@@ -59,10 +59,10 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, int data_len,
   }
 }
 
-Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy)
+Tensor::Tensor(int* dims_n, int dim_len, float* data_n, bool copy)
     : dim_len(dim_len) {
   if (dim_len == 0) {
-    throw std::invalid_argument("Matrix dimensions cannot be empty!");
+    throw std::invalid_argument("Tensor dimensions cannot be empty!");
   }
 
   if (copy) {
@@ -110,9 +110,9 @@ Matrix::Matrix(int* dims_n, int dim_len, float* data_n, bool copy)
   }
 }
 
-Matrix::Matrix(const int* dims_n, int dim_len, float val) : dim_len(dim_len) {
+Tensor::Tensor(const int* dims_n, int dim_len, float val) : dim_len(dim_len) {
   if (dim_len == 0) {
-    throw std::invalid_argument("Matrix dimensions cannot be empty!");
+    throw std::invalid_argument("Tensor dimensions cannot be empty!");
   }
 
   dists = int_size_alloc(dim_len);
@@ -136,10 +136,10 @@ Matrix::Matrix(const int* dims_n, int dim_len, float val) : dim_len(dim_len) {
   }
 }
 
-Matrix::Matrix(const int* dims_n, int dim_len, unsigned int random_seed)
+Tensor::Tensor(const int* dims_n, int dim_len, unsigned int random_seed)
     : dim_len(dim_len) {
   if (dim_len == 0) {
-    throw std::invalid_argument("Matrix dimensions cannot be empty!");
+    throw std::invalid_argument("Tensor dimensions cannot be empty!");
   }
 
   if (random_seed == 0) {
@@ -170,7 +170,7 @@ Matrix::Matrix(const int* dims_n, int dim_len, unsigned int random_seed)
   }
 }
 
-Matrix::Matrix(const Matrix& other)
+Tensor::Tensor(const Tensor& other)
     : dim_len(other.get_dim_len()),
       data_len(other.data_len),
       aligned_data_len(other.aligned_data_len) {
@@ -190,7 +190,7 @@ Matrix::Matrix(const Matrix& other)
   }
 }
 
-Matrix& Matrix::operator=(const Matrix& other) {
+Tensor& Tensor::operator=(const Tensor& other) {
   if (this == &other) {
     return *this;
   }
@@ -221,7 +221,7 @@ Matrix& Matrix::operator=(const Matrix& other) {
   return *this;
 }
 
-Matrix::Matrix(Matrix&& other) noexcept
+Tensor::Tensor(Tensor&& other) noexcept
     : dim_len(other.get_dim_len()),
       data_len(other.data_len),
       aligned_data_len(other.aligned_data_len),
@@ -236,7 +236,7 @@ Matrix::Matrix(Matrix&& other) noexcept
   other.data = nullptr;
 }
 
-Matrix& Matrix::operator=(Matrix&& other) noexcept {
+Tensor& Tensor::operator=(Tensor&& other) noexcept {
   if (this == &other) {
     return *this;
   }
@@ -262,13 +262,13 @@ Matrix& Matrix::operator=(Matrix&& other) noexcept {
   return *this;
 }
 
-Matrix::~Matrix() {
+Tensor::~Tensor() {
   free(dims);
   free(dists);
   free(data);
 }
 
-float* Matrix::default_data_alloc() const {
+float* Tensor::default_data_alloc() const {
   float* arr = (float*)aligned_alloc(alignment, aligned_data_len);
 
   if (arr == nullptr) {
@@ -278,7 +278,7 @@ float* Matrix::default_data_alloc() const {
   return arr;
 }
 
-float* Matrix::init_data_alloc(size_t size) {
+float* Tensor::init_data_alloc(size_t size) {
   aligned_data_len = size * sizeof(float);
   size_t remainder = aligned_data_len % alignment;
   if (remainder != 0) {
@@ -294,7 +294,7 @@ float* Matrix::init_data_alloc(size_t size) {
   return arr;
 }
 
-float* Matrix::float_size_alloc(size_t size) const {
+float* Tensor::float_size_alloc(size_t size) const {
   size_t a_size = size * sizeof(float);
   size_t remainder = a_size % alignment;
   if (remainder != 0) {
@@ -310,7 +310,7 @@ float* Matrix::float_size_alloc(size_t size) const {
   return arr;
 }
 
-int* Matrix::int_size_alloc(size_t size) const {
+int* Tensor::int_size_alloc(size_t size) const {
   int* arr = (int*)malloc(size * sizeof(int));
 
   if (arr == nullptr) {
@@ -320,7 +320,7 @@ int* Matrix::int_size_alloc(size_t size) const {
   return arr;
 }
 
-void Matrix::print_array(const float* arr, int len, int max) const {
+void Tensor::print_array(const float* arr, int len, int max) const {
   int end = std::min(len, max);
   for (size_t i = 0; i < end; ++i) {
     std::cout << arr[i];
@@ -331,7 +331,7 @@ void Matrix::print_array(const float* arr, int len, int max) const {
   std::cout << "\n";
 }
 
-void Matrix::print_array(const int* arr, int len, int max) const {
+void Tensor::print_array(const int* arr, int len, int max) const {
   int end = std::min(len, max);
   for (size_t i = 0; i < end; ++i) {
     std::cout << arr[i];
@@ -342,7 +342,7 @@ void Matrix::print_array(const int* arr, int len, int max) const {
   std::cout << "\n";
 }
 
-int Matrix::convert_idx(const std::initializer_list<int>& pos) const {
+int Tensor::convert_idx(const std::initializer_list<int>& pos) const {
   // Converts between regular indexing (nd) and stride position (1d)
   int idx = 0;
   int i = 0;
@@ -358,7 +358,7 @@ int Matrix::convert_idx(const std::initializer_list<int>& pos) const {
   return idx;
 }
 
-int* Matrix::get_broadcasted_strides(const int* dims_new,
+int* Tensor::get_broadcasted_strides(const int* dims_new,
                                      int dim_len_new) const {
   // Gets the new strides (row major, flattened) for a given broadcast
   if (dim_len_new >= dim_len) {
@@ -399,7 +399,7 @@ int* Matrix::get_broadcasted_strides(const int* dims_new,
   }
 }
 
-std::tuple<int, int, int> Matrix::get_matmul_tile(int n, int m, int k) const {
+std::tuple<int, int, int> Tensor::get_matmul_tile(int n, int m, int k) const {
   // Use loop order to optimize L Cache loading.
   // Use sysctl -a | grep cache to check Apple Silicon Cache Size
   // use sysctl -a | grep perflevel to check compute clusters
@@ -472,7 +472,7 @@ std::tuple<int, int, int> Matrix::get_matmul_tile(int n, int m, int k) const {
   return std::make_tuple(T_n, T_m, T_k);
 }
 
-void Matrix::matmul_cpu_batched(const float* __restrict__ A,
+void Tensor::matmul_cpu_batched(const float* __restrict__ A,
                                 const float* __restrict__ B,
                                 float* __restrict__ C, const int* this_dists,
                                 const int* other_dists, int n, int m, int k,
@@ -525,13 +525,13 @@ void Matrix::matmul_cpu_batched(const float* __restrict__ A,
   free(B_t);
 }
 
-void Matrix::matmul_cuda(const float* A, const float* B, float* C, int n, int m,
+void Tensor::matmul_cuda(const float* A, const float* B, float* C, int n, int m,
                          int k) const {
   // Uncomment after compiling with nvcc
   //::matmul_cuda(A, B, C, n, m, k);
 }
 
-void Matrix::matmul_cpu_outer(const float* __restrict__ A,
+void Tensor::matmul_cpu_outer(const float* __restrict__ A,
                               const float* __restrict__ B,
                               float* __restrict__ C, int n, int m,
                               int k) const {
@@ -594,7 +594,7 @@ void Matrix::matmul_cpu_outer(const float* __restrict__ A,
   free(A_t);
 }
 
-void Matrix::matmul_cpu_unrolled_16x(const float* __restrict__ A,
+void Tensor::matmul_cpu_unrolled_16x(const float* __restrict__ A,
                                      const float* __restrict__ B,
                                      float* __restrict__ C, int n, int m,
                                      int k) const {
@@ -865,7 +865,7 @@ void Matrix::matmul_cpu_unrolled_16x(const float* __restrict__ A,
   free(B_t);
 }
 
-void Matrix::matmul_cpu_unrolled_8x(const float* __restrict__ A,
+void Tensor::matmul_cpu_unrolled_8x(const float* __restrict__ A,
                                     const float* __restrict__ B,
                                     float* __restrict__ C, int n, int m,
                                     int k) const {
@@ -1024,7 +1024,7 @@ void Matrix::matmul_cpu_unrolled_8x(const float* __restrict__ A,
   free(B_t);
 }
 
-void Matrix::matmul_cpu_unrolled_4x(const float* __restrict__ A,
+void Tensor::matmul_cpu_unrolled_4x(const float* __restrict__ A,
                                     const float* __restrict__ B,
                                     float* __restrict__ C, int n, int m,
                                     int k) const {
@@ -1127,7 +1127,7 @@ void Matrix::matmul_cpu_unrolled_4x(const float* __restrict__ A,
 // for one val/row of A.
 //  Result: Updated tile code to be rectangular and weight on T_k, ignore m
 //  dimension. (Also made L1 tiling much more conservative)
-void Matrix::matmul_cpu_tiled_old(const float* __restrict__ A,
+void Tensor::matmul_cpu_tiled_old(const float* __restrict__ A,
                                   const float* __restrict__ B,
                                   float* __restrict__ C, int n, int m,
                                   int k) const {
@@ -1177,7 +1177,7 @@ void Matrix::matmul_cpu_tiled_old(const float* __restrict__ A,
   }
 }
 
-void Matrix::matmul_cpu_tiled(const float* __restrict__ A,
+void Tensor::matmul_cpu_tiled(const float* __restrict__ A,
                               const float* __restrict__ B,
                               float* __restrict__ C, int n, int m,
                               int k) const {
@@ -1215,7 +1215,44 @@ void Matrix::matmul_cpu_tiled(const float* __restrict__ A,
   }
 }
 
-void Matrix::matmul_cpu(const float* __restrict__ A,
+// void Tensor::matmul_metal(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
+//
+// }
+
+void Tensor::matmul_amx(const float* __restrict__ A, const float* __restrict__ B, float* __restrict__ C, int n, int m, int k) const {
+
+  //TODO: compute bitmasks once at start.
+  //TODO: Use extra registers for pipelining/prefetching
+
+  const size_t TILE = 32; //2x2 16x16 tiles.
+  float* A_t = float_size_alloc(n * m);
+  memset(C, 0, n * k * sizeof(float));
+  simd_transpose(A, A_t, n, m);
+
+  for (size_t ic = 0; ic < n; ic += TILE) {
+    size_t valid_a = std::min(TILE, n - ic);
+    for (size_t lc = 0; lc < k; lc += TILE) {
+      size_t valid_b = std::min(TILE, k - lc);
+      float* ptrC = &C[ic*k + lc];
+      
+      AMX_SET();
+      load_amx_output(ptrC, k);
+      for (size_t j = 0; j < m; ++j) { // Tile?
+        
+        const float* ptrA = &A_t[j*n + ic];
+        const float* ptrB = &B[j*k + lc];
+        amx_kernel_f32(ptrA, ptrB, valid_a, valid_b);
+      }
+
+      store_amx_output(ptrC, k);
+      AMX_CLR();
+    }
+  }
+
+  free(A_t);
+}
+
+void Tensor::matmul_cpu(const float* __restrict__ A,
                         const float* __restrict__ B, float* __restrict__ C,
                         int n, int m, int k) const {
   // A = nxm
@@ -1264,7 +1301,7 @@ void Matrix::matmul_cpu(const float* __restrict__ A,
   free(B_t);
 }
 
-void Matrix::matmul_cpu_naive(const float* __restrict__ A,
+void Tensor::matmul_cpu_naive(const float* __restrict__ A,
                               const float* __restrict__ B,
                               float* __restrict__ C, int n, int m,
                               int k) const {
@@ -1279,7 +1316,7 @@ void Matrix::matmul_cpu_naive(const float* __restrict__ A,
   }
 }
 
-void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z,
+void Tensor::simd_transpose(const float* A, float* B, int n, int m, int z,
                             const int* dists_new) const {
   // We choose to repeat code rather than make a temp dists var so that the
   // original dists_new can stay const (cannot free if we use const
@@ -1412,7 +1449,7 @@ void Matrix::simd_transpose(const float* A, float* B, int n, int m, int z,
   }
 }
 
-Matrix Matrix::matmul(const Matrix& other) const {
+Tensor Tensor::matmul(const Tensor& other) const {
   if (other.get_dim_len() == 1 && dim_len == 1) {
     // Dimension 1 x 1 = Dot product
 
@@ -1445,7 +1482,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
         }
       }
       data_out += vaddvq_f32(acc);
-      Matrix ret = Matrix(new_dims, 1, data_out);
+      Tensor ret = Tensor(new_dims, 1, data_out);
       free(new_dims);
       return ret;
     }
@@ -1491,7 +1528,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
         }
       }
 
-      Matrix ret = Matrix(new_dims, 1, data_out, false);
+      Tensor ret = Tensor(new_dims, 1, data_out, false);
       return ret;
     }
     throw std::invalid_argument("Invalid matrix-vector product dimensions!");
@@ -1544,12 +1581,12 @@ Matrix Matrix::matmul(const Matrix& other) const {
         }
       }
       free(other_t);
-      Matrix ret = Matrix(new_dims, 1, data_out, false);
+      Tensor ret = Tensor(new_dims, 1, data_out, false);
       return ret;
     }
     throw std::invalid_argument("Invalid vector-matrix product dimensions!");
   } else if (other.get_dim_len() == 2 && dim_len == 2) {
-    // Dimension 2 x 2 = Matrix multiplication
+    // Dimension 2 x 2 = Tensor multiplication
     // Will perform This X Other
     if (dims[1] == other.get_dims_index(0)) {
       int* new_dims = int_size_alloc(2);
@@ -1564,16 +1601,17 @@ Matrix Matrix::matmul(const Matrix& other) const {
                     new_dims[1]);
       } else {
         // Switch between different matmul alg's for profiling.
+        matmul_amx(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
         // matmul_cpu_unrolled_16x(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
         //matmul_cpu_unrolled_8x(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
         // matmul_cpu_unrolled_4x(data, other.data, data_out, new_dims[0],dims[1], new_dims[1]); 
-         matmul_cpu(data, other.data, data_out,new_dims[0], dims[1], new_dims[1]); 
+        // matmul_cpu(data, other.data, data_out,new_dims[0], dims[1], new_dims[1]); 
         // matmul_cpu_outer(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
         // matmul_cpu_tiled(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
         // matmul_cpu_tiled_old(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
         // matmul_cpu_naive(data, other.data, data_out, new_dims[0], dims[1], new_dims[1]);
       }
-      Matrix ret = Matrix(new_dims, 2, data_out, false);
+      Tensor ret = Tensor(new_dims, 2, data_out, false);
       return ret;
     }
     throw std::invalid_argument("Invalid matrix-matrix product dimensions!");
@@ -1695,7 +1733,7 @@ Matrix Matrix::matmul(const Matrix& other) const {
       free(this_dists);
       free(other_dists);
 
-      Matrix ret = Matrix(bmm_shape, 3, data_out, false);
+      Tensor ret = Tensor(bmm_shape, 3, data_out, false);
       return ret;
 
     } else {
@@ -1703,14 +1741,14 @@ Matrix Matrix::matmul(const Matrix& other) const {
           "Invalid batched matrix-matrix product dimensions!");
     }
   }
-  return Matrix(nullptr, 0, nullptr, false);
+  return Tensor(nullptr, 0, nullptr, false);
 }
 
-Matrix Matrix::clone() const {
-  return Matrix(dims, dim_len, data, data_len, dists);
+Tensor Tensor::clone() const {
+  return Tensor(dims, dim_len, data, data_len, dists);
 }
 
-Matrix Matrix::scmul(float s) const {
+Tensor Tensor::scmul(float s) const {
   float* data_out = default_data_alloc();
 
   float32x4_t scalar = vdupq_n_f32(s);
@@ -1729,13 +1767,13 @@ Matrix Matrix::scmul(float s) const {
     outPtr[i] = tPtr[i] * s;
   }
 
-  Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+  Tensor ret = Tensor(get_dims_clone(), dim_len, data_out, false);
   return ret;
 }
 
-Matrix Matrix::emul(const Matrix& other) const {
+Tensor Tensor::emul(const Tensor& other) const {
   // SIMD largely same as add - check add method for notes.
-  // Matrix - Vector element mul - specific, quicker kernel for ANN
+  // Tensor - Vector element mul - specific, quicker kernel for ANN
   if (other.get_dim_len() == 1 && dim_len == 2) {
     if (other.get_dims_index(0) == dims[1]) {
       float* data_out = default_data_alloc();
@@ -1760,7 +1798,7 @@ Matrix Matrix::emul(const Matrix& other) const {
         }
       }
 
-      Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+      Tensor ret = Tensor(get_dims_clone(), dim_len, data_out, false);
       return ret;
 
     } else if (other.get_dims_index(0) == dims[0]) {
@@ -1788,7 +1826,7 @@ Matrix Matrix::emul(const Matrix& other) const {
         oPtr += 1;
       }
 
-      Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+      Tensor ret = Tensor(get_dims_clone(), dim_len, data_out, false);
       return ret;
 
     } else {
@@ -1823,13 +1861,13 @@ Matrix Matrix::emul(const Matrix& other) const {
       outPtr[i] = tPtr[i] * oPtr[i];
     }
 
-    Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+    Tensor ret = Tensor(get_dims_clone(), dim_len, data_out, false);
     return ret;
   }
 }
 
-Matrix Matrix::add(const Matrix& other) const {
-  // Matrix - Vector add - specific, quicker kernel for ANN
+Tensor Tensor::add(const Tensor& other) const {
+  // Tensor - Vector add - specific, quicker kernel for ANN
   // Could generalize in future by doing broadcasting, but would be largely the
   // same as matmul Must be 2D and row major (cannot be semantically
   // reshaped/broadcast/transpose)
@@ -1860,7 +1898,7 @@ Matrix Matrix::add(const Matrix& other) const {
         }
       }
 
-      Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+      Tensor ret = Tensor(get_dims_clone(), dim_len, data_out, false);
       return ret;
 
     } else if (other.get_dims_index(0) == dims[0]) {  // Add 1d vector to cols
@@ -1894,7 +1932,7 @@ Matrix Matrix::add(const Matrix& other) const {
         oPtr += 1;
       }
 
-      Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+      Tensor ret = Tensor(get_dims_clone(), dim_len, data_out, false);
       return ret;
 
     } else {
@@ -1931,23 +1969,23 @@ Matrix Matrix::add(const Matrix& other) const {
       outPtr[i] = tPtr[i] + oPtr[i];
     }
 
-    Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+    Tensor ret = Tensor(get_dims_clone(), dim_len, data_out, false);
     return ret;
   }
 }
 
-Matrix Matrix::apply(float (*func)(float)) const {
+Tensor Tensor::apply(float (*func)(float)) const {
   float* data_out = default_data_alloc();
 
   for (size_t i = 0; i < data_len; ++i) {
     data_out[i] = func(data[i]);
   }
 
-  Matrix ret = Matrix(get_dims_clone(), dim_len, data_out, false);
+  Tensor ret = Tensor(get_dims_clone(), dim_len, data_out, false);
   return ret;
 }
 
-Matrix Matrix::transpose2d() const {
+Tensor Tensor::transpose2d() const {
   if (dim_len == 1) {
     return clone();
 
@@ -1961,14 +1999,14 @@ Matrix Matrix::transpose2d() const {
     dims_new[0] = dims[1];
     dims_new[1] = dims[0];
 
-    Matrix ret = Matrix(dims_new, dim_len, data_out, false);
+    Tensor ret = Tensor(dims_new, dim_len, data_out, false);
     return ret;
   } else {
     throw std::invalid_argument("Invalid matrix dimensions! Must be 1D or 2D!");
   }
 }
 
-void Matrix::scmul_inplace(float s) {
+void Tensor::scmul_inplace(float s) {
   float32x4_t scalar = vdupq_n_f32(s);
   float* tPtr = data;
 
@@ -1984,7 +2022,7 @@ void Matrix::scmul_inplace(float s) {
   }
 }
 
-void Matrix::emul_inplace(const Matrix& other) {
+void Tensor::emul_inplace(const Tensor& other) {
   if (other.get_dim_len() == 1 && dim_len == 2) {
     if (other.get_dims_index(0) == dims[1]) {
       float* tPtr = data;
@@ -2054,7 +2092,7 @@ void Matrix::emul_inplace(const Matrix& other) {
 }
 
 // Will prioritize row-col addition over col-row addition
-void Matrix::add_inplace(const Matrix& other) {
+void Tensor::add_inplace(const Tensor& other) {
   if (other.get_dim_len() == 1 && dim_len == 2) {
     if (other.get_dims_index(0) == dims[1]) {  // Add row to cols
 
@@ -2127,14 +2165,14 @@ void Matrix::add_inplace(const Matrix& other) {
   }
 }
 
-void Matrix::apply_inplace(float (*func)(float)) {
+void Tensor::apply_inplace(float (*func)(float)) {
   for (size_t i = 0; i < data_len; ++i) {
     data[i] = func(data[i]);
   }
 }
 
 // Must be 2D and row major. Returns a 1D matrix with sum of all rows.
-Matrix Matrix::sum_rows() const {
+Tensor Tensor::sum_rows() const {
   if (dim_len == 2) {
     int* new_dims = int_size_alloc(1);
     new_dims[0] = dims[1];
@@ -2168,7 +2206,7 @@ Matrix Matrix::sum_rows() const {
       outPtr += 1;
     }
 
-    Matrix ret = Matrix(new_dims, 1, data_out, false);
+    Tensor ret = Tensor(new_dims, 1, data_out, false);
     return ret;
 
   } else {
@@ -2177,7 +2215,7 @@ Matrix Matrix::sum_rows() const {
 }
 
 // Must be 2D and row major. Returns a 1D matrix with sum of all cols.
-Matrix Matrix::sum_cols() const {
+Tensor Tensor::sum_cols() const {
   if (dim_len == 2) {
     int* new_dims = int_size_alloc(1);
     new_dims[0] = dims[0];
@@ -2207,7 +2245,7 @@ Matrix Matrix::sum_cols() const {
       outPtr += 1;
     }
 
-    Matrix ret = Matrix(new_dims, 1, data_out, false);
+    Tensor ret = Tensor(new_dims, 1, data_out, false);
     return ret;
 
   } else {
@@ -2217,7 +2255,7 @@ Matrix Matrix::sum_cols() const {
 
 // General - can improve in future to sum over a given axes, would require
 // continous memory for given axes in order to use SIMD
-float Matrix::sum() const {
+float Tensor::sum() const {
   float* tPtr = data;
   float out = 0;
   float32x4_t acc = vdupq_n_f32(0.0f);
@@ -2238,38 +2276,38 @@ float Matrix::sum() const {
   return out;
 }
 
-float Matrix::get(const std::initializer_list<int>& pos) const {
+float Tensor::get(const std::initializer_list<int>& pos) const {
   return data[convert_idx(pos)];
 }
 
-float Matrix::get_index(int i) const {
+float Tensor::get_index(int i) const {
   if (i < 0 || i > data_len - 1) {
     throw std::invalid_argument("Invalid index!");
   }
   return data[i];
 }
 
-void Matrix::set(const std::initializer_list<int>& pos, float val) {
+void Tensor::set(const std::initializer_list<int>& pos, float val) {
   data[convert_idx(pos)] = val;
 }
 
-void Matrix::set_index(int i, float val) {
+void Tensor::set_index(int i, float val) {
   if (i < 0 || i > data_len - 1) {
     throw std::invalid_argument("Invalid index!");
   }
   data[i] = val;
 }
 
-int Matrix::get_dims_index(int i) const {
+int Tensor::get_dims_index(int i) const {
   if (i < 0 || i > dim_len - 1) {
     throw std::invalid_argument("Invalid index!");
   }
   return dims[i];
 }
 
-int Matrix::get_dim_len() const { return dim_len; }
+int Tensor::get_dim_len() const { return dim_len; }
 
-int* Matrix::get_dists_clone() const {
+int* Tensor::get_dists_clone() const {
   int* dists_clone = int_size_alloc(dim_len);
   for (size_t i = 0; i < dim_len; ++i) {
     dists_clone[i] = dists[i];
@@ -2277,7 +2315,7 @@ int* Matrix::get_dists_clone() const {
   return dists_clone;
 }
 
-int* Matrix::get_dims_clone() const {
+int* Tensor::get_dims_clone() const {
   int* dims_clone = int_size_alloc(dim_len);
   for (size_t i = 0; i < dim_len; ++i) {
     dims_clone[i] = dims[i];
@@ -2285,19 +2323,19 @@ int* Matrix::get_dims_clone() const {
   return dims_clone;
 }
 
-void Matrix::print_data(int max) const { print_array(data, data_len, max); }
+void Tensor::print_data(int max) const { print_array(data, data_len, max); }
 
-void Matrix::print_dims(int max) const { print_array(dims, dim_len, max); }
+void Tensor::print_dims(int max) const { print_array(dims, dim_len, max); }
 
-void Matrix::print_dists(int max) const { print_array(dists, dim_len, max); }
+void Tensor::print_dists(int max) const { print_array(dists, dim_len, max); }
 
 // Get/Set CUDA Usage
-void Matrix::set_CUDA(bool c) { cuda = c; }
+void Tensor::set_CUDA(bool c) { cuda = c; }
 
-bool Matrix::get_CUDA() { return cuda; }
+bool Tensor::get_CUDA() { return cuda; }
 
-void Matrix::set_tile(int t) { tile = t; }
+void Tensor::set_tile(int t) { tile = t; }
 
-int Matrix::get_tile() { return tile; }
+int Tensor::get_tile() { return tile; }
 
-int Matrix::get_alignment() { return alignment; }
+int Tensor::get_alignment() { return alignment; }

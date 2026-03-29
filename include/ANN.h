@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "Matrix.h"
+#include "Tensor.h"
 
 class ANN {
  public:
@@ -13,8 +13,8 @@ class ANN {
 
   ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n,
       unsigned int seed = 0);
-  Matrix forward(const Matrix& input);
-  void backprop(const Matrix& init_d_loss);
+  Tensor forward(const Tensor& input);
+  void backprop(const Tensor& init_d_loss);
   void update_weights_biases();
   void clear_grads_and_cache();
 
@@ -24,9 +24,9 @@ class ANN {
   void print_weights(int size = 100) const;
   void print_biases(int size = 100) const;
 
-  static void apply_stable_softmax(Matrix& m);
-  static float cross_entropy(const Matrix& truth, const Matrix& preds);
-  static int sum_correct(const Matrix& truth, const Matrix& preds);
+  static void apply_stable_softmax(Tensor& m);
+  static float cross_entropy(const Tensor& truth, const Tensor& preds);
+  static int sum_correct(const Tensor& truth, const Tensor& preds);
   static float relu(float x);
   static float sigmoid(float x);
   static float deriv_relu(float x);
@@ -35,12 +35,12 @@ class ANN {
  private:
   std::vector<int> layer_sizes;
   std::vector<Activation> activations;
-  std::vector<Matrix> weights;
-  std::vector<Matrix> biases;
-  std::vector<Matrix> z_cache;
-  std::vector<Matrix> a_cache;
-  std::vector<Matrix> grad_weights;
-  std::vector<Matrix> grad_biases;
+  std::vector<Tensor> weights;
+  std::vector<Tensor> biases;
+  std::vector<Tensor> z_cache;
+  std::vector<Tensor> a_cache;
+  std::vector<Tensor> grad_weights;
+  std::vector<Tensor> grad_biases;
   float learning_rate = 0.001;
 };
 
