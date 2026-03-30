@@ -246,3 +246,60 @@ TEST(TensorMatmul, NonSquareSingleBatch) {
     EXPECT_EQ(C.get_dims_index(1), 7);
     EXPECT_EQ(C.get_dims_index(2), 4);
 }
+
+TEST(TensorMatmul, Square32) {
+    int dimsA[] = {32, 32};
+    int dimsB[] = {32, 32};
+
+    Tensor A(dimsA, 2, 0.0f);
+    Tensor B(dimsB, 2, 0.0f);
+
+    fill_sequential(A);
+    fill_sequential(B);
+
+    Tensor C_ref = naive_matmul(A, B);
+    Tensor C_amx = A.matmul(B);
+
+    for (int i = 0; i < 32; i++)
+        for (int j = 0; j < 32; j++)
+            EXPECT_NEAR(C_amx.get({i, j}), C_ref.get({i, j}), 1e-3f)
+                << "Mismatch at (" << i << ", " << j << ")";
+}
+
+TEST(TensorMatmul, Square48) {
+    int dimsA[] = {48, 48};
+    int dimsB[] = {48, 48};
+
+    Tensor A(dimsA, 2, 0.0f);
+    Tensor B(dimsB, 2, 0.0f);
+
+    fill_sequential(A);
+    fill_sequential(B);
+
+    Tensor C_ref = naive_matmul(A, B);
+    Tensor C_amx = A.matmul(B);
+
+    for (int i = 0; i < 48; i++)
+        for (int j = 0; j < 48; j++)
+            EXPECT_NEAR(C_amx.get({i, j}), C_ref.get({i, j}), 1e-3f)
+                << "Mismatch at (" << i << ", " << j << ")";
+}
+
+TEST(TensorMatmul, Square49) {
+    int dimsA[] = {49, 49};
+    int dimsB[] = {49, 49};
+
+    Tensor A(dimsA, 2, 0.0f);
+    Tensor B(dimsB, 2, 0.0f);
+
+    fill_sequential(A);
+    fill_sequential(B);
+
+    Tensor C_ref = naive_matmul(A, B);
+    Tensor C_amx = A.matmul(B);
+
+    for (int i = 0; i < 49; i++)
+        for (int j = 0; j < 49; j++)
+            EXPECT_NEAR(C_amx.get({i, j}), C_ref.get({i, j}), 1e-3f)
+                << "Mismatch at (" << i << ", " << j << ")";
+}

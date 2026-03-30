@@ -1229,23 +1229,38 @@ void Tensor::matmul_amx(const float* __restrict__ A, const float* __restrict__ B
   memset(C, 0, n * k * sizeof(float));
   simd_transpose(A, A_t, n, m);
 
+  float* tmp = float_size_alloc(32 * 32);
+
   for (size_t ic = 0; ic < n; ic += TILE) {
     size_t valid_a = std::min(TILE, n - ic);
     for (size_t lc = 0; lc < k; lc += TILE) {
       size_t valid_b = std::min(TILE, k - lc);
       float* ptrC = &C[ic*k + lc];
-      
+
+      memset(tmp, 0, 32 * 32 * sizeof(float));
+      for (size_t r = 0; r < valid_a; r++) {
+        for (size_t c = 0; c < valid_b; c++) {
+          tmp[c*32 + r] = ptrC[r*k + c];
+        }
+      }
+
       AMX_SET();
-      load_amx_output(ptrC, k);
-      for (size_t j = 0; j < m; ++j) { // Tile?
-        
+      load_amx_output(tmp);
+
+      for (size_t j = 0; j < m; ++j) {
         const float* ptrA = &A_t[j*n + ic];
         const float* ptrB = &B[j*k + lc];
         amx_kernel_f32(ptrA, ptrB, valid_a, valid_b);
       }
 
-      store_amx_output(ptrC, k);
+      store_amx_output(tmp);
       AMX_CLR();
+
+      for (size_t r = 0; r < valid_a; r++) {
+        for (size_t c = 0; c < valid_b; c++) {
+          ptrC[r*k + c] += tmp[c*32 + r];
+        }
+      }
     }
   }
 

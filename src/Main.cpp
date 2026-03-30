@@ -28,21 +28,21 @@ std::tuple<std::vector<Tensor>, std::vector<Tensor>> load_MNIST_data(
   int images = 0;
   if (train) {
     imgFile = std::ifstream(
-        "/Users/karmaluitel/Desktop/Github/spiking_neural_network/data/"
+        "/Users/karmaluitel/Desktop/Github/m3_neural_network/data/"
         "train-images.idx3-ubyte",
         std::ios::binary);
     labFile = std::ifstream(
-        "/Users/karmaluitel/Desktop/Github/spiking_neural_network/data/"
+        "/Users/karmaluitel/Desktop/Github/m3_neural_network/data/"
         "train-labels.idx1-ubyte",
         std::ios::binary);
     images = 60000;
   } else {
     imgFile = std::ifstream(
-        "/Users/karmaluitel/Desktop/Github/spiking_neural_network/data/"
+        "/Users/karmaluitel/Desktop/Github/m3_neural_network/data/"
         "t10k-images.idx3-ubyte",
         std::ios::binary);
     labFile = std::ifstream(
-        "/Users/karmaluitel/Desktop/Github/spiking_neural_network/data/"
+        "/Users/karmaluitel/Desktop/Github/m3_neural_network/data/"
         "t10k-labels.idx1-ubyte",
         std::ios::binary);
     images = 10000;
@@ -138,7 +138,6 @@ void test(ANN& model, const std::vector<Tensor>& X,
 }
 
 int main() {
-
   pthread_t t = pthread_self();
   qos_class_t qos;
   int ret = pthread_get_qos_class_np(t, &qos, NULL);

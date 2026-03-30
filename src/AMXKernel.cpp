@@ -19,25 +19,26 @@ namespace {
     }
 }
 
-void load_amx_output(const float*  __restrict__  Z, int k) {
+void load_amx_output(const float* __restrict__ Z) {
     for (size_t j = 0; j < 16; j++) {
-        AMX_LDZ(((uint64_t)(j*4 + 0) << 56) | (uint64_t)&Z[j*k]);
-        AMX_LDZ(((uint64_t)(j*4 + 1) << 56) | (uint64_t)&Z[j*k+16]);
-        AMX_LDZ(((uint64_t)(j*4 + 2) << 56) | (uint64_t)&Z[(j+16)*k]);
-        AMX_LDZ(((uint64_t)(j*4 + 3) << 56) | (uint64_t)&Z[(j+16)*k+16]);
+        AMX_LDZ(((uint64_t)(j*4 + 0) << 56) | (uint64_t)&Z[j*32]);
+        AMX_LDZ(((uint64_t)(j*4 + 1) << 56) | (uint64_t)&Z[j*32 + 16]);
+        AMX_LDZ(((uint64_t)(j*4 + 2) << 56) | (uint64_t)&Z[(j+16)*32]);
+        AMX_LDZ(((uint64_t)(j*4 + 3) << 56) | (uint64_t)&Z[(j+16)*32 + 16]);
     }
 }
 
-void store_amx_output(float* __restrict__ Z, int k) {
+void store_amx_output(float* __restrict__ Z) {
     for (size_t j = 0; j < 16; j++) {
-        AMX_STZ(((uint64_t)(j*4 + 0) << 56) | (uint64_t)&Z[j*k]);
-        AMX_STZ(((uint64_t)(j*4 + 1) << 56) | (uint64_t)&Z[j*k+16]);
-        AMX_STZ(((uint64_t)(j*4 + 2) << 56) | (uint64_t)&Z[(j+16)*k]);
-        AMX_STZ(((uint64_t)(j*4 + 3) << 56) | (uint64_t)&Z[(j+16)*k+16]);
+        AMX_STZ(((uint64_t)(j*4 + 0) << 56) | (uint64_t)&Z[j*32]);
+        AMX_STZ(((uint64_t)(j*4 + 2) << 56) | (uint64_t)&Z[j*32 + 16]);
+        AMX_STZ(((uint64_t)(j*4 + 1) << 56) | (uint64_t)&Z[(j+16)*32]);
+        AMX_STZ(((uint64_t)(j*4 + 3) << 56) | (uint64_t)&Z[(j+16)*32 + 16]);
     }
 }
 
 void amx_kernel_f32(const float* __restrict__ X, const float* __restrict__ Y, size_t mask_x, size_t mask_y) {
+    
     load_vectors(X, Y);
 
     uint64_t bit_x_mask_inner = (mask_x >= 16) ? 0 : mask_x;
