@@ -31,8 +31,8 @@ void load_amx_output(const float* __restrict__ Z) {
 void store_amx_output(float* __restrict__ Z) {
     for (size_t j = 0; j < 16; j++) {
         AMX_STZ(((uint64_t)(j*4 + 0) << 56) | (uint64_t)&Z[j*32]);
-        AMX_STZ(((uint64_t)(j*4 + 2) << 56) | (uint64_t)&Z[j*32 + 16]);
-        AMX_STZ(((uint64_t)(j*4 + 1) << 56) | (uint64_t)&Z[(j+16)*32]);
+        AMX_STZ(((uint64_t)(j*4 + 1) << 56) | (uint64_t)&Z[j*32 + 16]);
+        AMX_STZ(((uint64_t)(j*4 + 2) << 56) | (uint64_t)&Z[(j+16)*32]);
         AMX_STZ(((uint64_t)(j*4 + 3) << 56) | (uint64_t)&Z[(j+16)*32 + 16]);
     }
 }
@@ -54,13 +54,13 @@ void amx_kernel_f32(const float* __restrict__ X, const float* __restrict__ Y, si
 
     //FMA at index 0, 1
     if (mask_y > 16) {
-        uint64_t instr1 = get_instruction(bit_x_mask_inner, bit_y_mask_outer, 1, 0, 64); 
+        uint64_t instr1 = get_instruction(bit_x_mask_inner, bit_y_mask_outer, 2, 0, 64); 
         AMX_FMA32(instr1);
     }
 
         //FMA at index 1, 0
     if (mask_x > 16) {
-        uint64_t instr2 = get_instruction(bit_x_mask_outer, bit_y_mask_inner, 2, 64, 0);
+        uint64_t instr2 = get_instruction(bit_x_mask_outer, bit_y_mask_inner, 1, 64, 0);
         AMX_FMA32(instr2);
     }
 
