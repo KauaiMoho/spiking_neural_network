@@ -54,14 +54,14 @@ void amx_kernel_f32(const float* __restrict__ X, const float* __restrict__ Y, si
 
     //FMA at index 0, 1
     if (mask_y > 16) {
-        uint64_t instr1 = get_instruction(bit_x_mask_inner, bit_y_mask_outer, 2, 0, 64); 
-        AMX_FMA32(instr1);
+        uint64_t instr2 = get_instruction(bit_x_mask_inner, bit_y_mask_outer, 2, 0, 64); 
+        AMX_FMA32(instr2);
     }
 
         //FMA at index 1, 0
     if (mask_x > 16) {
-        uint64_t instr2 = get_instruction(bit_x_mask_outer, bit_y_mask_inner, 1, 64, 0);
-        AMX_FMA32(instr2);
+        uint64_t instr1 = get_instruction(bit_x_mask_outer, bit_y_mask_inner, 1, 64, 0);
+        AMX_FMA32(instr1);
     }
 
     //FMA at index 0, 0
