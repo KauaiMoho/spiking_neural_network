@@ -1,4 +1,4 @@
-#include "Tensor.h"
+#include "../include/apple/Tensor.h"
 
 // Default do not use CUDA
 bool Tensor::cuda = false;

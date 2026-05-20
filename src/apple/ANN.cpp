@@ -1,4 +1,4 @@
-#include "ANN.h"
+#include "../include/apple/ANN.h"
 
 ANN::ANN(std::vector<int> layer_sizes_n, std::vector<Activation> activations_n,
          unsigned int seed)
